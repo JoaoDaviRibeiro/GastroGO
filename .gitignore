@@ -1,0 +1,11 @@
+# Secrets
+.env
+.env.local
+
+# Binaries/Executables
+bin/
+*.exe
+*.test
+
+# OS Files
+.DS_Store

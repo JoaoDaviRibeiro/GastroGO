@@ -4,12 +4,20 @@ import (
 	"log"
 	"net/http"
 
-	// FIXED: Updated both internal imports
+	// FIXED: Updated both internal
 	"github.com/JoaoDaviRibeiro/GastroGO/internal/auth"
 	"github.com/JoaoDaviRibeiro/GastroGO/internal/supabase"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	// Load .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Error loading .env file, checking system env...")
+	}
+
 	sbClient := supabase.NewClient()
 	authHandler := &auth.Handler{Supabase: sbClient}
 
