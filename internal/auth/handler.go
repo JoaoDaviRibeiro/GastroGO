@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context" // Required for passing user data through middleware
 	"encoding/json"
 	"net/http"
+	"strings" // Required for parsing the "Bearer" string
 
 	"github.com/nedpals/supabase-go"
 )
@@ -18,7 +20,8 @@ type AuthRequest struct {
 	Password string `json:"password"`
 }
 
-// SignUp handles creating new users
+// --- PUBLIC HANDLERS ---
+
 func (h *Handler) SignUp(w http.ResponseWriter, r *http.Request) {
 	var req AuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -61,4 +64,44 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(details)
+}
+
+// --- MIDDLEWARE & PROTECTED HANDLERS ---
+
+// IsAuthenticated is our middleware that guards protected routes
+func (h *Handler) IsAuthenticated(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Get the Authorization header
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		// 2. Remove "Bearer " prefix to get just the JWT
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// 3. Validate the token with Supabase
+		user, err := h.Supabase.Auth.User(r.Context(), token)
+		if err != nil {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+
+		// 4. Store user in context (useful for personalized data later)
+		ctx := context.WithValue(r.Context(), "user", user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+// Dashboard is an example of a protected route
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the user from context (injected by the middleware)
+	user := r.Context().Value("user").(*supabase.User)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Welcome to the secret GastroGO Dashboard!",
+		"email":   user.Email,
+	})
 }
