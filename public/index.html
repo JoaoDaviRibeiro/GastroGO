@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GastroGO Auth</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
+        .auth-container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; width: 300px; }
+        input { width: 100%; margin-bottom: 10px; padding: 8px; box-sizing: border-box; }
+        button { width: 48%; padding: 10px; cursor: pointer; }
+        #message { margin-top: 15px; font-size: 0.9em; color: blue; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <h3>GastroGO Auth</h3>
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        
+        <div style="display: flex; justify-content: space-between;">
+            <button onclick="auth('signup')">Sign Up</button>
+            <button onclick="auth('login')">Login</button>
+        </div>
+
+        <div id="message"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
