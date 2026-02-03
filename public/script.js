@@ -52,7 +52,7 @@ async function loadDashboard() {
     }
 
     try {
-        // 1. Fetch User Info (Dashboard Info)
+        // 1. Fetch User Info
         const userResponse = await fetch('/api/dashboard', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -71,10 +71,17 @@ async function loadDashboard() {
             let restaurantHTML = '<h3>🍽️ GastroGO Restaurants</h3><ul>';
             if (restaurants && restaurants.length > 0) {
                 restaurants.forEach(res => {
+                    // Generate Google Maps link if coordinates exist
+                    const mapsUrl = `https://www.google.com/maps?q=${res.lat},${res.lng}`;
+                    const hasCoords = res.lat !== 0 && res.lng !== 0;
+
                     restaurantHTML += `
                         <li>
-                            <strong>${res.name}</strong> - ${res.cuisine}<br>
-                            <small>${res.address} | Rating: ${res.rating} ⭐</small>
+                            <strong>${res.name}</strong> (${res.cuisine})<br>
+                            <small>📍 ${res.address || 'Address not listed'}</small><br>
+                            <small>⭐ Rating: ${res.rating} | 
+                                ${hasCoords ? `<a href="${mapsUrl}" target="_blank">View on Map</a>` : 'No GPS data'}
+                            </small>
                         </li><br>`;
                 });
             } else {

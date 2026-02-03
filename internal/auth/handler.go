@@ -22,6 +22,8 @@ type Restaurant struct {
 	Cuisine   string  `json:"cuisine"`
 	Address   string  `json:"address"`
 	Rating    float64 `json:"rating"`
+	Lat       float64 `json:"lat"`
+	Lng       float64 `json:"lng"`
 	UserID    string  `json:"user_id"`
 }
 
