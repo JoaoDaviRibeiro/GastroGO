@@ -23,7 +23,7 @@ async function auth(action) {
                 messageDiv.style.color = "blue";
                 messageDiv.innerText = "Login successful! Redirecting...";
                 
-                // 1. Store the token in localStorage
+                // Store token for later use
                 localStorage.setItem('sb_token', data.access_token);
                 
                 // 2. Redirect to the dashboard
@@ -47,7 +47,7 @@ async function loadDashboard() {
     const display = document.getElementById('dashboard-data');
 
     if (!token) {
-        window.location.href = "/"; // Kick back to login if no token
+        window.location.href = "/";
         return;
     }
 
@@ -55,9 +55,16 @@ async function loadDashboard() {
         const response = await fetch('/api/dashboard', {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}` // 3. Send the token in the header
+                'Authorization': `Bearer ${token}`
             }
         });
+
+        // --- SESSION EXPIRY CHECK (Option 1) ---
+        if (response.status === 401) {
+            console.warn("Session expired or invalid token.");
+            handleSessionExpiry();
+            return;
+        }
 
         if (response.ok) {
             const data = await response.json();
@@ -66,13 +73,19 @@ async function loadDashboard() {
                 <p><strong>Logged in as:</strong> ${data.email}</p>
             `;
         } else {
-            // Token likely expired or invalid
-            localStorage.removeItem('sb_token');
-            window.location.href = "/";
+            // Any other error (500, etc)
+            handleSessionExpiry();
         }
     } catch (err) {
         console.error("Dashboard load failed:", err);
     }
+}
+
+// Clean up logic to prevent repetitive code
+function handleSessionExpiry() {
+    localStorage.removeItem('sb_token');
+    alert("Your session has expired. Please login again.");
+    window.location.href = "/";
 }
 
 function logout() {
