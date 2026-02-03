@@ -29,8 +29,11 @@ func main() {
 	http.HandleFunc("/api/login", authHandler.Login)
 
 	// 5. Protected API Routes
-	// We wrap the Dashboard handler with IsAuthenticated middleware
+	// dashboard: returns a welcome message and user email
 	http.HandleFunc("/api/dashboard", authHandler.IsAuthenticated(authHandler.Dashboard))
+
+	// restaurants: fetches the restaurant list from the database
+	http.HandleFunc("/api/restaurants", authHandler.IsAuthenticated(authHandler.GetRestaurants))
 
 	log.Println("GastroGO server running on :8080")
 	// Using log.Fatal to ensure we catch any startup crashes

@@ -52,25 +52,40 @@ async function loadDashboard() {
     }
 
     try {
-        const response = await fetch('/api/dashboard', {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        // 1. Fetch User Info (Dashboard Info)
+        const userResponse = await fetch('/api/dashboard', {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        // --- SESSION EXPIRY CHECK (Option 1) ---
-        if (response.status === 401) {
-            console.warn("Session expired or invalid token.");
-            handleSessionExpiry();
-            return;
-        }
+        if (userResponse.status === 401) return handleSessionExpiry();
 
-        if (response.ok) {
-            const data = await response.json();
+        // 2. Fetch Restaurant Data
+        const resResponse = await fetch('/api/restaurants', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (userResponse.ok && resResponse.ok) {
+            const userData = await userResponse.json();
+            const restaurants = await resResponse.json();
+
+            let restaurantHTML = '<h3>🍽️ GastroGO Restaurants</h3><ul>';
+            if (restaurants && restaurants.length > 0) {
+                restaurants.forEach(res => {
+                    restaurantHTML += `
+                        <li>
+                            <strong>${res.name}</strong> - ${res.cuisine}<br>
+                            <small>${res.address} | Rating: ${res.rating} ⭐</small>
+                        </li><br>`;
+                });
+            } else {
+                restaurantHTML += '<li>No restaurants found. Add your first one!</li>';
+            }
+            restaurantHTML += '</ul>';
+
             display.innerHTML = `
-                <p><strong>Status:</strong> ${data.message}</p>
-                <p><strong>Logged in as:</strong> ${data.email}</p>
+                <p>Welcome back, <strong>${userData.email}</strong>!</p>
+                <hr>
+                ${restaurantHTML}
             `;
         } else {
             // Any other error (500, etc)

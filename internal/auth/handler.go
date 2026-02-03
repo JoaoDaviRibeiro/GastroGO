@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"context" // Required for passing user data through middleware
+	"context"
 	"encoding/json"
 	"net/http"
-	"strings" // Required for parsing the "Bearer" string
+	"strings"
 
 	"github.com/nedpals/supabase-go"
 )
@@ -14,11 +14,27 @@ type Handler struct {
 	Supabase *supabase.Client
 }
 
+// Restaurant represents the structure of our database table
+type Restaurant struct {
+	ID        int64   `json:"id"`
+	CreatedAt string  `json:"created_at"`
+	Name      string  `json:"name"`
+	Cuisine   string  `json:"cuisine"`
+	Address   string  `json:"address"`
+	Rating    float64 `json:"rating"`
+	UserID    string  `json:"user_id"`
+}
+
 // AuthRequest is the "shape" of the JSON we expect from the frontend
 type AuthRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
+// contextKey is a custom type to prevent context collisions
+type contextKey string
+
+const userKey contextKey = "user"
 
 // --- PUBLIC HANDLERS ---
 
@@ -88,16 +104,28 @@ func (h *Handler) IsAuthenticated(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// 4. Store user in context (useful for personalized data later)
-		ctx := context.WithValue(r.Context(), "user", user)
+		ctx := context.WithValue(r.Context(), userKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
-// Dashboard is an example of a protected route
+// GetRestaurants fetches all data from the restaurants table
+func (h *Handler) GetRestaurants(w http.ResponseWriter, r *http.Request) {
+	var results []Restaurant
+
+	// The supabase-go client uses the PostgREST syntax
+	err := h.Supabase.DB.From("restaurants").Select("*").Execute(&results)
+	if err != nil {
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	// Retrieve the user from context (injected by the middleware)
-	user := r.Context().Value("user").(*supabase.User)
+	user := r.Context().Value(userKey).(*supabase.User)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
