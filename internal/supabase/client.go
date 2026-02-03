@@ -7,8 +7,8 @@ import (
 )
 
 func NewClient() *supabase.Client {
-	// Pro-tip: Use os.Getenv once we set up your .env file
+
 	supabaseURL := os.Getenv("SUPABASE_URL")
-	supabaseKey := os.Getenv("SUPABASE_ANON_KEY")
+	supabaseKey := os.Getenv("SUPABASE_SERVICE_KEY")
 	return supabase.CreateClient(supabaseURL, supabaseKey)
 }
