@@ -1,43 +1,88 @@
-async function auth(action) {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const messageDiv = document.getElementById('message');
+async function auth(action, credentials = {}) {
+    const { email, password } = credentials;
 
-    messageDiv.innerText = "Processing...";
+    if (!email || !password) {
+        return { success: false, tone: 'error', message: 'Email and password are required.' };
+    }
 
     try {
         const response = await fetch(`/api/${action}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, password })
         });
 
         const data = await response.json();
 
         if (response.ok) {
             if (action === 'signup') {
-                messageDiv.style.color = "green";
-                messageDiv.innerText = "Sign up successful! Check your email.";
-            } else {
-                // Store token for session persistence
-                localStorage.setItem('sb_token', data.access_token);
-                
-                messageDiv.style.color = "blue";
-                messageDiv.innerText = "Login successful! Redirecting...";
-                
-                setTimeout(() => {
-                    window.location.href = "/dashboard.html";
-                }, 1000);
+                return {
+                    success: true,
+                    tone: 'success',
+                    message: 'Sign up successful! Check your inbox for verification.'
+                };
             }
-        } else {
-            messageDiv.style.color = "red";
-            messageDiv.innerText = "Error: " + (data.error_description || data.error || "Check credentials");
+
+            localStorage.setItem('sb_token', data.access_token);
+
+            return {
+                success: true,
+                tone: 'info',
+                message: 'Login successful! Redirecting...'
+            };
         }
+
+        return {
+            success: false,
+            tone: 'error',
+            message: data.error_description || data.error || 'Check your credentials.'
+        };
     } catch (err) {
-        messageDiv.style.color = "red";
-        messageDiv.innerText = "Connection failed: " + err.message;
+        return {
+            success: false,
+            tone: 'error',
+            message: `Connection failed: ${err.message}`
+        };
     }
 }
+
+async function requestPasswordReset(email) {
+    if (!email) {
+        return { success: false, tone: 'error', message: 'Please enter the email you registered with.' };
+    }
+
+    try {
+        const response = await fetch('/api/password-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        if (response.ok) {
+            return {
+                success: true,
+                tone: 'success',
+                message: 'If this email exists, a reset link is on its way.'
+            };
+        }
+
+        const data = await response.json().catch(() => ({}));
+        return {
+            success: false,
+            tone: 'error',
+            message: data.error_description || data.error || 'Unable to request a reset right now.'
+        };
+    } catch (err) {
+        return {
+            success: false,
+            tone: 'error',
+            message: `Reset request failed: ${err.message}`
+        };
+    }
+}
+
+window.auth = auth;
+window.requestPasswordReset = requestPasswordReset;
 
 async function loadDashboard() {
     const token = localStorage.getItem('sb_token');
