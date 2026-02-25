@@ -4,33 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GastroGO Dashboard</title>
-    <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 20px; line-height: 1.6; }
-        
-        /* Letterboxd-style Stars */
-        .star-rating {
-            font-size: 24px;
-            cursor: pointer;
-            display: inline-block;
-        }
-        .star {
-            color: #ccc;
-            transition: color 0.2s;
-        }
-        /* When hovering over a star, highlight it and all stars before it */
-        .star-rating:hover .star { color: #ffcc00; }
-        .star:hover ~ .star { color: #ccc; }
-        
-        .restaurant-card {
-            border-bottom: 1px solid #eee;
-            padding: 15px 0;
-            margin-bottom: 10px;
-        }
-        
-        .logout-btn { margin-top: 20px; padding: 10px 20px; background: #ff4444; color: white; border: none; cursor: pointer; border-radius: 5px; }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body onload="loadDashboard()">
+<body class="page-dashboard" onload="loadDashboard()">
     <h2>GastroGO Protected Dashboard</h2>
     
     <div id="user-welcome"></div>
