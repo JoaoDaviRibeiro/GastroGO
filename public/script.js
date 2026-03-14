@@ -65,6 +65,13 @@ window.setPreferredTheme = setPreferredTheme;
 window.togglePreferredTheme = togglePreferredTheme;
 window.getPreferredTheme = () => window.currentTheme;
 
+const translate = (key, params) => {
+    if (typeof window !== 'undefined' && typeof window.t === 'function') {
+        return window.t(key, params);
+    }
+    return key;
+};
+
 if (window.matchMedia) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSchemeChange = (event) => {
@@ -85,7 +92,7 @@ async function auth(action, credentials = {}) {
     const { email, password } = credentials;
 
     if (!email || !password) {
-        return { success: false, tone: 'error', message: 'Email and password are required.' };
+        return { success: false, tone: 'error', message: translate('auth.status.credsMissing') };
     }
 
     try {
@@ -102,7 +109,7 @@ async function auth(action, credentials = {}) {
                 return {
                     success: true,
                     tone: 'success',
-                    message: 'Sign up successful! Check your inbox for verification.'
+                    message: translate('auth.status.signupSuccess')
                 };
             }
 
@@ -111,27 +118,27 @@ async function auth(action, credentials = {}) {
             return {
                 success: true,
                 tone: 'info',
-                message: 'Login successful! Redirecting...'
+                message: translate('auth.status.successRedirect')
             };
         }
 
         return {
             success: false,
             tone: 'error',
-            message: data.error_description || data.error || 'Check your credentials.'
+            message: data.error_description || data.error || translate('auth.status.credsInvalid')
         };
     } catch (err) {
         return {
             success: false,
             tone: 'error',
-            message: `Connection failed: ${err.message}`
+            message: translate('auth.status.connectionFailed', { error: err.message })
         };
     }
 }
 
 async function requestPasswordReset(email) {
     if (!email) {
-        return { success: false, tone: 'error', message: 'Please enter the email you registered with.' };
+        return { success: false, tone: 'error', message: translate('auth.status.resetMissingEmail') };
     }
 
     try {
@@ -145,7 +152,7 @@ async function requestPasswordReset(email) {
             return {
                 success: true,
                 tone: 'success',
-                message: 'If this email exists, a reset link is on its way.'
+                message: translate('auth.status.resetSuccess')
             };
         }
 
@@ -153,13 +160,13 @@ async function requestPasswordReset(email) {
         return {
             success: false,
             tone: 'error',
-            message: data.error_description || data.error || 'Unable to request a reset right now.'
+            message: data.error_description || data.error || translate('auth.status.resetUnavailable')
         };
     } catch (err) {
         return {
             success: false,
             tone: 'error',
-            message: `Reset request failed: ${err.message}`
+            message: translate('auth.status.resetFailed', { error: err.message })
         };
     }
 }
@@ -263,7 +270,7 @@ async function submitRating(restaurantId, ratingValue) {
 
 function handleSessionExpiry() {
     localStorage.removeItem('sb_token');
-    alert("Your session has expired. Please login again.");
+    alert(translate('common.session.expired'));
     window.location.href = "/";
 }
 

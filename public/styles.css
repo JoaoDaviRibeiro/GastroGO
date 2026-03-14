@@ -189,6 +189,48 @@ body.page-auth .mode-switch button.active {
     box-shadow: 0 15px 35px rgba(24, 176, 200, 0.35);
 }
 
+.form-panel-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 16px;
+}
+
+.locale-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.locale-toggle select {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(3, 17, 29, 0.6);
+    color: var(--text);
+    padding: 6px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+body[data-theme="light"] .locale-toggle select {
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text);
+    border-color: rgba(3, 23, 39, 0.2);
+}
+
+.locale-toggle.compact span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    border: 0;
+}
+
 body.page-auth .auth-form {
     display: flex;
     flex-direction: column;

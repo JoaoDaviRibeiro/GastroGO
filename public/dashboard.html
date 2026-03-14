@@ -19,13 +19,21 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+    <script src="i18n.js"></script>
     <script src="script.js"></script>
     <script type="text/babel" data-presets="env,react">
         const range = (count) => Array.from({ length: count }, (_, index) => index + 1);
 
-        function RatingStars({ currentValue = 0, onRate }) {
+        function RatingStars({ currentValue = 0, onRate, getLabel }) {
             const [hovered, setHovered] = React.useState(0);
             const displayValue = hovered || currentValue;
+
+            const labelFor = (value) => {
+                if (typeof getLabel === 'function') {
+                    return getLabel(value);
+                }
+                return `Rate ${value} star${value > 1 ? 's' : ''}`;
+            };
 
             return (
                 <div
@@ -42,7 +50,7 @@
                             onBlur={() => setHovered(0)}
                             onClick={() => onRate(value)}
                             aria-pressed={currentValue === value}
-                            aria-label={`Rate ${value} star${value > 1 ? 's' : ''}`}
+                            aria-label={labelFor(value)}
                         >
                             ★
                         </button>
@@ -52,7 +60,8 @@
         }
 
         function ThemeToggle({ theme, onToggle }) {
-            const nextLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+            const { t } = window.useI18n();
+            const nextLabel = theme === 'dark' ? t('common.themeToggle.toLight') : t('common.themeToggle.toDark');
 
             return (
                 <button
@@ -69,6 +78,7 @@
         }
 
         function DashboardApp() {
+            const { t, locale } = window.useI18n();
             const [user, setUser] = React.useState(null);
             const [restaurants, setRestaurants] = React.useState([]);
             const [loading, setLoading] = React.useState(true);
@@ -84,6 +94,10 @@
             });
             const tokenRef = React.useRef(null);
 
+            React.useEffect(() => {
+                document.title = t('meta.title.dashboard');
+            }, [locale, t]);
+
             const loadData = React.useCallback(async () => {
                 const token = localStorage.getItem('sb_token');
                 tokenRef.current = token;
@@ -94,7 +108,7 @@
                 }
 
                 setLoading(true);
-                setStatus({ tone: 'info', message: 'Syncing your properties...' });
+                setStatus({ tone: 'info', message: t('dashboard.status.syncing') });
 
                 try {
                     const [userRes, restaurantRes] = await Promise.all([
@@ -122,14 +136,14 @@
                     setUser(profile);
                     setRestaurants(Array.isArray(list) ? list : []);
                     setRatings({});
-                    setStatus({ tone: 'success', message: 'Data synced. Ready to manage operations.' });
+                    setStatus({ tone: 'success', message: t('dashboard.status.ready') });
                 } catch (error) {
                     console.error('Dashboard load failed:', error);
-                    setStatus({ tone: 'error', message: 'Unable to load dashboard. Please try again.' });
+                    setStatus({ tone: 'error', message: t('dashboard.status.error') });
                 } finally {
                     setLoading(false);
                 }
-            }, []);
+            }, [t]);
 
             React.useEffect(() => {
                 loadData();
@@ -183,7 +197,7 @@
 
                 const previous = ratings[restaurantId] || 0;
                 setRatings((prev) => ({ ...prev, [restaurantId]: ratingValue }));
-                setStatus({ tone: 'info', message: 'Submitting rating...' });
+                setStatus({ tone: 'info', message: t('dashboard.status.ratingSending') });
 
                 try {
                     const response = await fetch('/api/rate', {
@@ -196,7 +210,13 @@
                     });
 
                     if (response.ok) {
-                        setStatus({ tone: 'success', message: `Thanks! ${ratingValue}-star rating saved.` });
+                        setStatus({
+                            tone: 'success',
+                            message: t('dashboard.status.ratingSaved', {
+                                rating: ratingValue,
+                                suffix: ratingValue > 1 ? 's' : ''
+                            })
+                        });
                         return;
                     }
 
@@ -204,12 +224,12 @@
                     setRatings((prev) => ({ ...prev, [restaurantId]: previous }));
                     setStatus({
                         tone: 'error',
-                        message: errorData.error || 'Rating failed. You might have already rated this.'
+                        message: errorData.error || t('dashboard.status.ratingDuplicate')
                     });
                 } catch (error) {
                     console.error('Rating failed:', error);
                     setRatings((prev) => ({ ...prev, [restaurantId]: previous }));
-                    setStatus({ tone: 'error', message: 'Connection error. Check your server logs.' });
+                    setStatus({ tone: 'error', message: t('dashboard.status.ratingConnection') });
                 }
             };
 
@@ -240,25 +260,29 @@
                 return { total, mapped, missingAddress };
             }, [restaurants]);
 
+            const ratingLabel = React.useCallback((value) => (
+                t('dashboard.rating.ariaLabel', { value, suffix: value > 1 ? 's' : '' })
+            ), [t]);
+
             return (
                 <div className="dashboard-shell">
                     <header className="dashboard-header">
                         <div>
-                            <p className="eyebrow">GASTROGO</p>
-                            <h1>Operations cockpit</h1>
-                            <p>Monitor every location, sync feedback, and keep your staff informed from a single pane.</p>
+                            <p className="eyebrow">{t('dashboard.header.eyebrow')}</p>
+                            <h1>{t('dashboard.header.title')}</h1>
+                            <p>{t('dashboard.header.body')}</p>
                         </div>
 
                         <div className="header-actions">
                             <ThemeToggle theme={theme} onToggle={toggleTheme} />
                             <div className="user-pill">
-                                <span>{user?.email || 'Loading profile...'}</span>
+                                <span>{user?.email || t('dashboard.userPillFallback')}</span>
                             </div>
                             <button
                                 className="ghost"
                                 type="button"
                                 onClick={goToProfile}
-                                aria-label="Open profile"
+                                aria-label={t('common.actions.openProfile')}
                             >
                                 <svg
                                     width="20"
@@ -278,7 +302,7 @@
                                 </svg>
                             </button>
                             <button className="ghost" type="button" onClick={handleLogout}>
-                                Logout
+                                {t('common.actions.logout')}
                             </button>
                         </div>
                     </header>
@@ -291,37 +315,37 @@
 
                     <section className="stat-grid">
                         <article className="stat-card">
-                            <p className="label">Active restaurants</p>
+                            <p className="label">{t('dashboard.stats.active.label')}</p>
                             <strong>{stats.total}</strong>
-                            <small>Total properties synced</small>
+                            <small>{t('dashboard.stats.active.sublabel')}</small>
                         </article>
                         <article className="stat-card">
-                            <p className="label">Mapped locations</p>
+                            <p className="label">{t('dashboard.stats.mapped.label')}</p>
                             <strong>{stats.mapped}</strong>
-                            <small>GPS-ready venues</small>
+                            <small>{t('dashboard.stats.mapped.sublabel')}</small>
                         </article>
                         <article className="stat-card">
-                            <p className="label">Missing addresses</p>
+                            <p className="label">{t('dashboard.stats.missing.label')}</p>
                             <strong>{stats.missingAddress}</strong>
-                            <small>Needs quick updates</small>
+                            <small>{t('dashboard.stats.missing.sublabel')}</small>
                         </article>
                     </section>
 
                     <section className="panel">
                         <div className="panel-header">
                             <div>
-                                <h2>Restaurant overview</h2>
-                                <p>Search, filter, and rate performance to keep the signal flowing.</p>
+                                <h2>{t('dashboard.panel.title')}</h2>
+                                <p>{t('dashboard.panel.body')}</p>
                             </div>
                             <div className="panel-controls">
                                 <input
                                     type="search"
-                                    placeholder="Search by name, cuisine, or address"
+                                    placeholder={t('dashboard.panel.searchPlaceholder')}
                                     value={query}
                                     onChange={(event) => setQuery(event.target.value)}
                                 />
                                 <select value={cuisineFilter} onChange={(event) => setCuisineFilter(event.target.value)}>
-                                    <option value="all">All cuisines</option>
+                                    <option value="all">{t('dashboard.filter.allCuisines')}</option>
                                     {cuisineOptions.map((cuisine) => (
                                         <option key={cuisine} value={cuisine}>
                                             {cuisine}
@@ -329,21 +353,21 @@
                                     ))}
                                 </select>
                                 <button type="button" className="ghost" onClick={loadData}>
-                                    Refresh
+                                    {t('dashboard.panel.refresh')}
                                 </button>
                             </div>
                         </div>
 
                         {loading ? (
-                            <div className="panel-loading">Pulling the latest data...</div>
+                            <div className="panel-loading">{t('dashboard.panel.loading')}</div>
                         ) : filteredRestaurants.length === 0 ? (
                             <div className="panel-empty">
-                                <p>No restaurants match that filter.</p>
+                                <p>{t('dashboard.panel.empty')}</p>
                                 <button type="button" className="ghost" onClick={() => {
                                     setQuery('');
                                     setCuisineFilter('all');
                                 }}>
-                                    Clear filters
+                                    {t('dashboard.panel.resetFilters')}
                                 </button>
                             </div>
                         ) : (
@@ -358,22 +382,23 @@
                                         <article className="restaurant-card" key={restaurant.id}>
                                             <div className="restaurant-heading">
                                                 <h3>{restaurant.name}</h3>
-                                                <span className="badge">{restaurant.cuisine || 'Cuisine TBD'}</span>
+                                                <span className="badge">{restaurant.cuisine || t('dashboard.cards.cuisineTbd')}</span>
                                             </div>
-                                            <p className="restaurant-address">{restaurant.address || 'Address not listed yet'}</p>
+                                            <p className="restaurant-address">{restaurant.address || t('dashboard.cards.addressMissing')}</p>
                                             <div className="restaurant-meta">
-                                                <span>{hasCoordinates ? 'GPS ready' : 'Add coordinates'}</span>
+                                                <span>{hasCoordinates ? t('dashboard.cards.gpsReady') : t('dashboard.cards.addCoordinates')}</span>
                                                 {mapsUrl && (
                                                     <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                                                        View on Maps ↗
+                                                        {t('dashboard.cards.viewOnMaps')}
                                                     </a>
                                                 )}
                                             </div>
                                             <div className="restaurant-actions">
-                                                <p>How is this location performing?</p>
+                                                <p>{t('dashboard.cards.ratingPrompt')}</p>
                                                 <RatingStars
                                                     currentValue={ratings[restaurant.id] || 0}
                                                     onRate={(value) => handleRating(restaurant.id, value)}
+                                                    getLabel={ratingLabel}
                                                 />
                                             </div>
                                         </article>

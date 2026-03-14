@@ -19,6 +19,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+    <script src="i18n.js"></script>
     <script src="script.js"></script>
     <script type="text/babel" data-presets="env,react">
         const emptyProfile = {
@@ -33,8 +34,31 @@
             digest_opt_in: true
         };
 
+        function LanguageSwitcher({ variant = 'default' }) {
+            const { locale, setLocale, t, options } = window.useI18n();
+            const className = variant === 'compact' ? 'locale-toggle compact' : 'locale-toggle';
+
+            return (
+                <label className={className}>
+                    <span>{t('common.language.label')}</span>
+                    <select
+                        value={locale}
+                        onChange={(event) => setLocale(event.target.value)}
+                        aria-label={t('common.language.label')}
+                    >
+                        {options.map((option) => (
+                            <option key={option} value={option}>
+                                {t(`common.language.options.${option}`)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            );
+        }
+
         function ThemeToggle({ theme, onToggle }) {
-            const nextLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+            const { t } = window.useI18n();
+            const nextLabel = theme === 'dark' ? t('common.themeToggle.toLight') : t('common.themeToggle.toDark');
 
             return (
                 <button
@@ -51,6 +75,7 @@
         }
 
         function ProfileApp() {
+            const { t, locale } = window.useI18n();
             const [profile, setProfile] = React.useState(emptyProfile);
             const [original, setOriginal] = React.useState(emptyProfile);
             const [loading, setLoading] = React.useState(true);
@@ -63,6 +88,10 @@
                 return 'dark';
             });
             const tokenRef = React.useRef(null);
+
+            React.useEffect(() => {
+                document.title = t('meta.title.profile');
+            }, [locale, t]);
 
             const hydrateProfile = (data = {}) => {
                 const fallbackName = data.full_name || (data.email ? data.email.split('@')[0] : '');
@@ -79,7 +108,7 @@
                 }
 
                 setLoading(true);
-                setStatus({ tone: 'info', message: 'Loading your profile...' });
+                setStatus({ tone: 'info', message: t('profile.status.loading') });
 
                 try {
                     let response = await fetch('/api/profile', {
@@ -114,7 +143,7 @@
 
                         setProfile(hydratedFallback);
                         setOriginal(hydratedFallback);
-                        setStatus({ tone: 'info', message: 'Profile endpoint not found; showing dashboard info instead.' });
+                        setStatus({ tone: 'info', message: t('profile.status.fallback') });
                         return;
                     }
 
@@ -128,14 +157,14 @@
 
                     setProfile(hydrated);
                     setOriginal(hydrated);
-                    setStatus({ tone: 'success', message: 'Profile loaded. Make your updates below.' });
+                    setStatus({ tone: 'success', message: t('profile.status.ready') });
                 } catch (error) {
                     console.error('Profile load failed:', error);
-                    setStatus({ tone: 'error', message: error.message || 'Unable to fetch profile. Please try again.' });
+                    setStatus({ tone: 'error', message: error.message || t('profile.status.errorFetch') });
                 } finally {
                     setLoading(false);
                 }
-            }, []);
+            }, [t]);
 
             React.useEffect(() => {
                 loadProfile();
@@ -172,7 +201,7 @@
 
             const handleReset = () => {
                 setProfile(original);
-                setStatus({ tone: 'info', message: 'Changes reverted.' });
+                setStatus({ tone: 'info', message: t('profile.status.reverted') });
             };
 
             const handleSave = async (event) => {
@@ -185,7 +214,7 @@
                 }
 
                 setSaving(true);
-                setStatus({ tone: 'info', message: 'Saving profile...' });
+                setStatus({ tone: 'info', message: t('profile.status.saving') });
 
                 try {
                     const response = await fetch('/api/profile', {
@@ -203,10 +232,10 @@
                     }
 
                     setOriginal(profile);
-                    setStatus({ tone: 'success', message: 'Profile updated successfully.' });
+                    setStatus({ tone: 'success', message: t('profile.status.saved') });
                 } catch (error) {
                     console.error('Profile save failed:', error);
-                    setStatus({ tone: 'error', message: error.message || 'Unable to save profile.' });
+                    setStatus({ tone: 'error', message: error.message || t('profile.status.saveError') });
                 } finally {
                     setSaving(false);
                 }
@@ -229,17 +258,18 @@
                 <div className="profile-shell">
                     <header className="profile-header">
                         <div>
-                            <p className="eyebrow">GASTROGO</p>
-                            <h1>Profile & Preferences</h1>
-                            <p>Review your account details, update contact info, and control how GastroGO keeps you in the loop.</p>
+                            <p className="eyebrow">{t('profile.header.eyebrow')}</p>
+                            <h1>{t('profile.header.title')}</h1>
+                            <p>{t('profile.header.body')}</p>
                         </div>
                         <div className="header-actions">
+                            <LanguageSwitcher variant="compact" />
                             <ThemeToggle theme={theme} onToggle={toggleTheme} />
                             <div className="user-pill">
-                                <span>{profile.email || 'Loading...'}</span>
+                                <span>{profile.email || t('dashboard.userPillFallback')}</span>
                             </div>
-                            <button className="ghost" type="button" onClick={navigateToDashboard}>Back to dashboard</button>
-                            <button className="ghost" type="button" onClick={handleLogout}>Logout</button>
+                            <button className="ghost" type="button" onClick={navigateToDashboard}>{t('common.actions.backToDashboard')}</button>
+                            <button className="ghost" type="button" onClick={handleLogout}>{t('common.actions.logout')}</button>
                         </div>
                     </header>
 
@@ -251,37 +281,37 @@
 
                     <section className="profile-grid">
                         <article className="profile-card">
-                            <h2>Personal details</h2>
-                            <p className="card-lede">This information appears on workspace rosters and shared documents.</p>
+                            <h2>{t('profile.section.personalTitle')}</h2>
+                            <p className="card-lede">{t('profile.section.personalLede')}</p>
                             {loading ? (
-                                <div className="panel-loading">Fetching profile...</div>
+                                <div className="panel-loading">{t('profile.panel.loading')}</div>
                             ) : (
                                 <form className="profile-form" onSubmit={handleSave}>
                                     <label>
-                                        Full name
-                                        <input type="text" value={profile.full_name} onChange={handleFieldChange('full_name')} placeholder="Jamie Rivera" required />
+                                        {t('profile.form.fullName')}
+                                        <input type="text" value={profile.full_name} onChange={handleFieldChange('full_name')} placeholder={t('common.placeholders.profileName')} required />
                                     </label>
                                     <label>
-                                        Role / Title
-                                        <input type="text" value={profile.title} onChange={handleFieldChange('title')} placeholder="Ops Lead" />
+                                        {t('profile.form.title')}
+                                        <input type="text" value={profile.title} onChange={handleFieldChange('title')} placeholder={t('common.placeholders.profileTitle')} />
                                     </label>
                                     <label>
-                                        Phone number
-                                        <input type="tel" value={profile.phone} onChange={handleFieldChange('phone')} placeholder="+1 555 123 4567" />
+                                        {t('profile.form.phone')}
+                                        <input type="tel" value={profile.phone} onChange={handleFieldChange('phone')} placeholder={t('common.placeholders.phone')} />
                                     </label>
                                     <label>
-                                        Location
-                                        <input type="text" value={profile.location} onChange={handleFieldChange('location')} placeholder="Lisbon, Portugal" />
+                                        {t('profile.form.location')}
+                                        <input type="text" value={profile.location} onChange={handleFieldChange('location')} placeholder={t('common.placeholders.location')} />
                                     </label>
                                     <label>
-                                        Bio / Notes
-                                        <textarea value={profile.bio} onChange={handleFieldChange('bio')} rows="3" placeholder="Share your focus areas or kitchen specialties." />
+                                        {t('profile.form.bio')}
+                                        <textarea value={profile.bio} onChange={handleFieldChange('bio')} rows="3" placeholder={t('common.placeholders.bio')} />
                                     </label>
 
                                     <div className="form-actions">
-                                        <button type="button" className="ghost" onClick={handleReset} disabled={saving}>Reset</button>
+                                        <button type="button" className="ghost" onClick={handleReset} disabled={saving}>{t('profile.form.reset')}</button>
                                         <button type="submit" className="primary" disabled={saving}>
-                                            {saving ? 'Saving...' : 'Save changes'}
+                                            {saving ? t('profile.form.saving') : t('profile.form.save')}
                                         </button>
                                     </div>
                                 </form>

@@ -19,24 +19,25 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+    <script src="i18n.js"></script>
     <script src="script.js"></script>
     <script type="text/babel">
-        const modes = {
-            login: {
-                label: 'Log in',
-                headline: 'Sign in to GastroGO',
-                action: 'login',
-                cta: 'Let me in'
-            },
-            signup: {
-                label: 'Create account',
-                headline: 'Create your workspace',
-                action: 'signup',
-                cta: 'Join the chefs'
-            }
-        };
+        function MultilineText({ text = '' }) {
+            const lines = String(text).split('\n');
+            return (
+                <>
+                    {lines.map((line, index) => (
+                        <React.Fragment key={`${line}-${index}`}>
+                            {line}
+                            {index < lines.length - 1 && <br />}
+                        </React.Fragment>
+                    ))}
+                </>
+            );
+        }
 
         function AuthApp() {
+            const { t, locale } = window.useI18n();
             const [mode, setMode] = React.useState('login');
             const [email, setEmail] = React.useState('');
             const [password, setPassword] = React.useState('');
@@ -47,12 +48,33 @@
 
             React.useEffect(() => {
                 setMessage('');
-            }, [mode]);
+            }, [mode, locale]);
+
+            React.useEffect(() => {
+                document.title = t('meta.title.auth');
+            }, [locale, t]);
+
+            const modes = React.useMemo(() => ({
+                login: {
+                    label: t('auth.modes.login.label'),
+                    headline: t('auth.modes.login.headline'),
+                    lede: t('auth.modes.login.lede'),
+                    cta: t('auth.modes.login.cta'),
+                    action: 'login'
+                },
+                signup: {
+                    label: t('auth.modes.signup.label'),
+                    headline: t('auth.modes.signup.headline'),
+                    lede: t('auth.modes.signup.lede'),
+                    cta: t('auth.modes.signup.cta'),
+                    action: 'signup'
+                }
+            }), [locale, t]);
 
             const handleSubmit = async (event) => {
                 event.preventDefault();
                 setLoading(true);
-                setMessage('Processing...');
+                setMessage(t('auth.status.processing'));
                 setTone('info');
 
                 const result = await window.auth(modes[mode].action, { email, password });
@@ -69,7 +91,7 @@
 
             const handlePasswordReset = async () => {
                 setResetting(true);
-                setMessage('Checking your email...');
+                setMessage(t('auth.status.resetting'));
                 setTone('info');
 
                 const result = await window.requestPasswordReset(email);
@@ -78,25 +100,24 @@
                 setMessage(result.message);
             };
 
+            const heroHeadline = t('auth.hero.headline');
+
             return (
                 <div className="auth-grid">
                     <section className="hero-panel">
                         <div>
-                            <p className="eyebrow">GASTROGO</p>
-                            <h1>Modern hospitality<br/>meets precise access.</h1>
-                            <p>
-                                Manage your kitchens, staff, and guest experiences from one secure portal.
-                                Sign in to continue or start fresh with a new workspace.
-                            </p>
+                            <p className="eyebrow">{t('auth.hero.eyebrow')}</p>
+                            <h1><MultilineText text={heroHeadline} /></h1>
+                            <p>{t('auth.hero.body')}</p>
                         </div>
                         <div className="stat-row">
                             <div className="stat">
-                                <strong>200+</strong>
-                                active teams today
+                                <strong>{t('auth.stats.teamsValue')}</strong>
+                                {t('auth.stats.teamsLabel')}
                             </div>
                             <div className="stat">
-                                <strong>99.98%</strong>
-                                uptime last quarter
+                                <strong>{t('auth.stats.uptimeValue')}</strong>
+                                {t('auth.stats.uptimeLabel')}
                             </div>
                         </div>
                     </section>
@@ -118,16 +139,14 @@
                         </div>
 
                         <h2>{modes[mode].headline}</h2>
-                        <p className="form-lede">
-                            Use your email and password to {mode === 'login' ? 'access your dashboard.' : 'spin up a secure account.'}
-                        </p>
+                        <p className="form-lede">{modes[mode].lede}</p>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
                             <label>
-                                Email address
+                                {t('auth.form.emailLabel')}
                                 <input
                                     type="email"
-                                    placeholder="chef@gastrogosuite.com"
+                                    placeholder={t('auth.form.emailPlaceholder')}
                                     value={email}
                                     onChange={(event) => setEmail(event.target.value)}
                                     required
@@ -135,10 +154,10 @@
                             </label>
 
                             <label>
-                                Password
+                                {t('auth.form.passwordLabel')}
                                 <input
                                     type="password"
-                                    placeholder="••••••••"
+                                    placeholder={t('auth.form.passwordPlaceholder')}
                                     value={password}
                                     onChange={(event) => setPassword(event.target.value)}
                                     required
@@ -147,7 +166,7 @@
 
                             <div className="actions">
                                 <button className="primary" type="submit" disabled={loading}>
-                                    {loading ? 'Working...' : modes[mode].cta}
+                                    {loading ? t('auth.form.submitWorking') : modes[mode].cta}
                                 </button>
                                 <button
                                     type="button"
@@ -155,7 +174,7 @@
                                     onClick={handlePasswordReset}
                                     disabled={resetting}
                                 >
-                                    {resetting ? 'Sending link...' : 'Forgot password?'}
+                                    {resetting ? t('auth.form.forgotWorking') : t('auth.form.forgot')}
                                 </button>
                             </div>
                         </form>
