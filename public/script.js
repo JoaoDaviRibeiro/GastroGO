@@ -1,3 +1,86 @@
+const THEME_STORAGE_KEY = 'gg_theme';
+const THEME_EVENT = 'gastro:theme-change';
+
+const prefersDarkMode = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+const applyThemeToBody = (theme) => {
+    const normalized = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', normalized);
+    document.documentElement.style.setProperty('color-scheme', normalized);
+
+    const annotatePageNodes = () => {
+        if (!document.body) return;
+        document.querySelectorAll('.page').forEach((node) => {
+            node.setAttribute('data-theme', normalized);
+        });
+    };
+
+    const setBodyAttr = () => {
+        if (document.body) {
+            document.body.setAttribute('data-theme', normalized);
+            annotatePageNodes();
+        }
+    };
+
+    if (document.body) {
+        setBodyAttr();
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            setBodyAttr();
+            annotatePageNodes();
+        }, { once: true });
+    }
+
+    window.currentTheme = normalized;
+    window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { theme: normalized } }));
+};
+
+const initializeTheme = () => {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') {
+        applyThemeToBody(stored);
+        return stored;
+    }
+
+    const fallback = prefersDarkMode() ? 'dark' : 'light';
+    applyThemeToBody(fallback);
+    return fallback;
+};
+
+const setPreferredTheme = (theme) => {
+    const normalized = theme === 'light' ? 'light' : 'dark';
+    localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    applyThemeToBody(normalized);
+    return normalized;
+};
+
+const togglePreferredTheme = () => {
+    const nextTheme = window.currentTheme === 'light' ? 'dark' : 'light';
+    return setPreferredTheme(nextTheme);
+};
+
+const initialTheme = initializeTheme();
+window.currentTheme = initialTheme;
+window.setPreferredTheme = setPreferredTheme;
+window.togglePreferredTheme = togglePreferredTheme;
+window.getPreferredTheme = () => window.currentTheme;
+
+if (window.matchMedia) {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSchemeChange = (event) => {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY);
+        if (stored === 'light' || stored === 'dark') return;
+        applyThemeToBody(event.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handleSchemeChange);
+}
+
+window.addEventListener('storage', (event) => {
+    if (event.key === THEME_STORAGE_KEY && event.newValue) {
+        applyThemeToBody(event.newValue);
+    }
+});
+
 async function auth(action, credentials = {}) {
     const { email, password } = credentials;
 

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GastroGO Profile</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="page-profile">
+    <main class="page profile-page">
+        <div class="bg-mesh"></div>
+        <div class="noise"></div>
+        <div id="root"></div>
+    </main>
+
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+    <script src="script.js"></script>
+    <script type="text/babel" data-presets="env,react">
+        const emptyProfile = {
+            email: '',
+            full_name: '',
+            title: '',
+            phone: '',
+            location: '',
+            bio: '',
+            timezone: 'UTC',
+            sms_alerts: false,
+            digest_opt_in: true
+        };
+
+        function ThemeToggle({ theme, onToggle }) {
+            const nextLabel = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+
+            return (
+                <button
+                    type="button"
+                    className="theme-toggle"
+                    onClick={onToggle}
+                    aria-label={nextLabel}
+                >
+                    <span className="theme-toggle-track" aria-hidden="true">
+                        <span className="theme-toggle-thumb" data-theme={theme}></span>
+                    </span>
+                </button>
+            );
+        }
+
+        function ProfileApp() {
+            const [profile, setProfile] = React.useState(emptyProfile);
+            const [original, setOriginal] = React.useState(emptyProfile);
+            const [loading, setLoading] = React.useState(true);
+            const [saving, setSaving] = React.useState(false);
+            const [status, setStatus] = React.useState({ tone: 'info', message: '' });
+            const [theme, setTheme] = React.useState(() => {
+                if (typeof window !== 'undefined' && window.getPreferredTheme) {
+                    return window.getPreferredTheme();
+                }
+                return 'dark';
+            });
+            const tokenRef = React.useRef(null);
+
+            const hydrateProfile = (data = {}) => {
+                const fallbackName = data.full_name || (data.email ? data.email.split('@')[0] : '');
+                return { ...emptyProfile, ...data, full_name: fallbackName };
+            };
+
+            const loadProfile = React.useCallback(async () => {
+                const token = localStorage.getItem('sb_token');
+                tokenRef.current = token;
+
+                if (!token) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                setLoading(true);
+                setStatus({ tone: 'info', message: 'Loading your profile...' });
+
+                try {
+                    let response = await fetch('/api/profile', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    if (response.status === 401) {
+                        if (window.handleSessionExpiry) {
+                            window.handleSessionExpiry();
+                        } else {
+                            localStorage.removeItem('sb_token');
+                            window.location.href = '/';
+                        }
+                        return;
+                    }
+
+                    if (response.status === 404) {
+                        console.warn('Profile endpoint missing. Falling back to dashboard payload.');
+                        response = await fetch('/api/dashboard', {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Fallback request failed');
+                        }
+
+                        const dashboardData = await response.json();
+                        const hydratedFallback = hydrateProfile({
+                            email: dashboardData.email,
+                            full_name: dashboardData.full_name
+                        });
+
+                        setProfile(hydratedFallback);
+                        setOriginal(hydratedFallback);
+                        setStatus({ tone: 'info', message: 'Profile endpoint not found; showing dashboard info instead.' });
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Profile request failed');
+                    }
+
+                    const data = await response.json();
+                    const hydrated = hydrateProfile(data);
+
+                    setProfile(hydrated);
+                    setOriginal(hydrated);
+                    setStatus({ tone: 'success', message: 'Profile loaded. Make your updates below.' });
+                } catch (error) {
+                    console.error('Profile load failed:', error);
+                    setStatus({ tone: 'error', message: error.message || 'Unable to fetch profile. Please try again.' });
+                } finally {
+                    setLoading(false);
+                }
+            }, []);
+
+            React.useEffect(() => {
+                loadProfile();
+            }, [loadProfile]);
+
+            React.useEffect(() => {
+                if (typeof window === 'undefined') return;
+                if (window.setPreferredTheme) {
+                    window.setPreferredTheme(theme);
+                } else {
+                    document.body?.setAttribute('data-theme', theme);
+                    localStorage.setItem('gg_theme', theme);
+                }
+            }, [theme]);
+
+            React.useEffect(() => {
+                if (typeof window === 'undefined') return undefined;
+                const handleThemeChange = (event) => {
+                    const next = event.detail?.theme;
+                    setTheme((prev) => (next && next !== prev ? next : prev));
+                };
+                window.addEventListener('gastro:theme-change', handleThemeChange);
+                return () => window.removeEventListener('gastro:theme-change', handleThemeChange);
+            }, []);
+
+            const toggleTheme = React.useCallback(() => {
+                setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+            }, []);
+
+            const handleFieldChange = (field) => (event) => {
+                const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+                setProfile((prev) => ({ ...prev, [field]: value }));
+            };
+
+            const handleReset = () => {
+                setProfile(original);
+                setStatus({ tone: 'info', message: 'Changes reverted.' });
+            };
+
+            const handleSave = async (event) => {
+                event.preventDefault();
+                const token = tokenRef.current || localStorage.getItem('sb_token');
+
+                if (!token) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                setSaving(true);
+                setStatus({ tone: 'info', message: 'Saving profile...' });
+
+                try {
+                    const response = await fetch('/api/profile', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify(profile)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Update failed');
+                    }
+
+                    setOriginal(profile);
+                    setStatus({ tone: 'success', message: 'Profile updated successfully.' });
+                } catch (error) {
+                    console.error('Profile save failed:', error);
+                    setStatus({ tone: 'error', message: error.message || 'Unable to save profile.' });
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            const handleLogout = () => {
+                if (window.logout) {
+                    window.logout();
+                } else {
+                    localStorage.removeItem('sb_token');
+                    window.location.href = '/';
+                }
+            };
+
+            const navigateToDashboard = () => {
+                window.location.href = '/dashboard.html';
+            };
+
+            return (
+                <div className="profile-shell">
+                    <header className="profile-header">
+                        <div>
+                            <p className="eyebrow">GASTROGO</p>
+                            <h1>Profile & Preferences</h1>
+                            <p>Review your account details, update contact info, and control how GastroGO keeps you in the loop.</p>
+                        </div>
+                        <div className="header-actions">
+                            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+                            <div className="user-pill">
+                                <span>{profile.email || 'Loading...'}</span>
+                            </div>
+                            <button className="ghost" type="button" onClick={navigateToDashboard}>Back to dashboard</button>
+                            <button className="ghost" type="button" onClick={handleLogout}>Logout</button>
+                        </div>
+                    </header>
+
+                    {status.message && (
+                        <div className={`status-strip ${status.tone}`} role="status">
+                            {status.message}
+                        </div>
+                    )}
+
+                    <section className="profile-grid">
+                        <article className="profile-card">
+                            <h2>Personal details</h2>
+                            <p className="card-lede">This information appears on workspace rosters and shared documents.</p>
+                            {loading ? (
+                                <div className="panel-loading">Fetching profile...</div>
+                            ) : (
+                                <form className="profile-form" onSubmit={handleSave}>
+                                    <label>
+                                        Full name
+                                        <input type="text" value={profile.full_name} onChange={handleFieldChange('full_name')} placeholder="Jamie Rivera" required />
+                                    </label>
+                                    <label>
+                                        Role / Title
+                                        <input type="text" value={profile.title} onChange={handleFieldChange('title')} placeholder="Ops Lead" />
+                                    </label>
+                                    <label>
+                                        Phone number
+                                        <input type="tel" value={profile.phone} onChange={handleFieldChange('phone')} placeholder="+1 555 123 4567" />
+                                    </label>
+                                    <label>
+                                        Location
+                                        <input type="text" value={profile.location} onChange={handleFieldChange('location')} placeholder="Lisbon, Portugal" />
+                                    </label>
+                                    <label>
+                                        Bio / Notes
+                                        <textarea value={profile.bio} onChange={handleFieldChange('bio')} rows="3" placeholder="Share your focus areas or kitchen specialties." />
+                                    </label>
+
+                                    <div className="form-actions">
+                                        <button type="button" className="ghost" onClick={handleReset} disabled={saving}>Reset</button>
+                                        <button type="submit" className="primary" disabled={saving}>
+                                            {saving ? 'Saving...' : 'Save changes'}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </article>
+
+                    </section>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ProfileApp />);
+    </script>
+</body>
+</html>
