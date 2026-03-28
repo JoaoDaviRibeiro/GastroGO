@@ -197,33 +197,34 @@ async function loadDashboard() {
             const restaurants = await resRes.json();
 
             let restaurantHTML = '<h3>🍽️ GastroGO Restaurants</h3>';
-            
+
             if (restaurants && restaurants.length > 0) {
                 restaurants.forEach(res => {
-                    const mapsUrl = `https://www.google.com/maps?q=${res.lat},${res.lng}`;
-                    const hasCoords = res.lat !== 0 && res.lng !== 0;
+                    const hasCoords = Number(res.lat) && Number(res.lng);
+                    const mapsUrl = hasCoords ? `https://www.google.com/maps?q=${res.lat},${res.lng}` : '';
+                    const badgeLabel = Array.isArray(res.types) && res.types.length
+                        ? res.types[0].replace(/_/g, ' ')
+                        : 'Category TBD';
+                    const ratingLabel = res.rating
+                        ? `⭐ ${res.rating.toFixed(1)} · ${(res.user_ratings_total || 0).toLocaleString()} reviews`
+                        : 'Rating unavailable';
 
                     restaurantHTML += `
                         <div class="restaurant-card">
-                            <strong>${res.name}</strong> (${res.cuisine})<br>
-                            <small>📍 ${res.address || 'Address not listed'}</small><br>
-                            
-                            <div class="star-rating" data-rid="${res.id}">
-                                <span class="star" onclick="submitRating(${res.id}, 1)">★</span>
-                                <span class="star" onclick="submitRating(${res.id}, 2)">★</span>
-                                <span class="star" onclick="submitRating(${res.id}, 3)">★</span>
-                                <span class="star" onclick="submitRating(${res.id}, 4)">★</span>
-                                <span class="star" onclick="submitRating(${res.id}, 5)">★</span>
+                            ${res.photo_url ? `<div class="restaurant-photo"><img src="${res.photo_url}" alt="Photo of ${res.name}" loading="lazy" /></div>` : ''}
+                            <div class="restaurant-heading">
+                                <strong>${res.name}</strong>
+                                <span class="badge">${badgeLabel}</span>
                             </div>
-
-                            <br>
+                            <small>📍 ${res.address || 'Address not listed'}</small>
+                            <small>${ratingLabel}</small>
                             <small>
-                                ${hasCoords ? `<a href="${mapsUrl}" target="_blank">View on Map</a>` : 'No GPS data'}
+                                ${mapsUrl ? `<a href="${mapsUrl}" target="_blank" rel="noopener">View on Map</a>` : 'No GPS data'}
                             </small>
                         </div><hr style="border: 0.5px solid #eee;">`;
                 });
             } else {
-                restaurantHTML += '<p>No restaurants found. Add your first one!</p>';
+                restaurantHTML += '<p>No restaurants found. Try a different search!</p>';
             }
 
             display.innerHTML = `
@@ -234,37 +235,6 @@ async function loadDashboard() {
         }
     } catch (err) {
         console.error("Dashboard load failed:", err);
-    }
-}
-
-// Logic to send the rating to the Go Backend
-async function submitRating(restaurantId, ratingValue) {
-    const token = localStorage.getItem('sb_token');
-    
-    try {
-        const response = await fetch('/api/rate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            // CRITICAL: Ensure we send pure numbers, not strings
-            body: JSON.stringify({ 
-                restaurant_id: parseInt(restaurantId), 
-                rating: parseFloat(ratingValue) 
-            })
-        });
-
-        if (response.ok) {
-            alert(`You rated this ${ratingValue} stars!`);
-        } else {
-            const errorData = await response.json().catch(() => ({}));
-            // Show the actual error from the backend (409 Conflict)
-            alert(errorData.error || "Rating failed. You might have already rated this.");
-        }
-    } catch (err) {
-        console.error("Rating failed:", err);
-        alert("Connection error. Check your server logs.");
     }
 }
 

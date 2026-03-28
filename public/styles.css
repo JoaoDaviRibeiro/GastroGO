@@ -626,6 +626,21 @@ body.page-dashboard .restaurant-card {
     gap: 12px;
 }
 
+body.page-dashboard .restaurant-photo {
+    border-radius: 18px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.page-dashboard .restaurant-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 body.page-dashboard .restaurant-heading {
     display: flex;
     justify-content: space-between;
@@ -788,6 +803,11 @@ body[data-theme="light"] .panel-empty {
 body[data-theme="light"] .restaurant-card {
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid rgba(16, 34, 53, 0.08);
+}
+
+body[data-theme="light"] .restaurant-photo {
+    background: rgba(16, 34, 53, 0.04);
+    border-color: rgba(16, 34, 53, 0.08);
 }
 
 body[data-theme="light"] .badge {

@@ -22,43 +22,6 @@
     <script src="i18n.js"></script>
     <script src="script.js"></script>
     <script type="text/babel" data-presets="env,react">
-        const range = (count) => Array.from({ length: count }, (_, index) => index + 1);
-
-        function RatingStars({ currentValue = 0, onRate, getLabel }) {
-            const [hovered, setHovered] = React.useState(0);
-            const displayValue = hovered || currentValue;
-
-            const labelFor = (value) => {
-                if (typeof getLabel === 'function') {
-                    return getLabel(value);
-                }
-                return `Rate ${value} star${value > 1 ? 's' : ''}`;
-            };
-
-            return (
-                <div
-                    className="rating-control"
-                    onMouseLeave={() => setHovered(0)}
-                >
-                    {range(5).map((value) => (
-                        <button
-                            key={value}
-                            type="button"
-                            className={`star ${displayValue >= value ? 'active' : ''}`}
-                            onMouseEnter={() => setHovered(value)}
-                            onFocus={() => setHovered(value)}
-                            onBlur={() => setHovered(0)}
-                            onClick={() => onRate(value)}
-                            aria-pressed={currentValue === value}
-                            aria-label={labelFor(value)}
-                        >
-                            ★
-                        </button>
-                    ))}
-                </div>
-            );
-        }
-
         function ThemeToggle({ theme, onToggle }) {
             const { t } = window.useI18n();
             const nextLabel = theme === 'dark' ? t('common.themeToggle.toLight') : t('common.themeToggle.toDark');
@@ -85,14 +48,30 @@
             const [status, setStatus] = React.useState({ tone: 'info', message: '' });
             const [query, setQuery] = React.useState('');
             const [cuisineFilter, setCuisineFilter] = React.useState('all');
-            const [ratings, setRatings] = React.useState({});
             const [theme, setTheme] = React.useState(() => {
                 if (typeof window !== 'undefined' && window.getPreferredTheme) {
                     return window.getPreferredTheme();
                 }
                 return 'dark';
             });
-            const tokenRef = React.useRef(null);
+            const formatCategory = React.useCallback((types = []) => {
+                if (!Array.isArray(types) || types.length === 0) {
+                    return t('dashboard.cards.cuisineTbd');
+                }
+                return types[0].replace(/_/g, ' ');
+            }, [t]);
+            const formatRatingSummary = React.useCallback((restaurant) => {
+                const ratingValue = Number(restaurant.rating);
+                if (!ratingValue) {
+                    return t('dashboard.cards.ratingUnavailable');
+                }
+                const reviewCount = Number(restaurant.user_ratings_total) || 0;
+                const formattedCount = reviewCount.toLocaleString(locale === 'pt-BR' ? 'pt-BR' : 'en-US');
+                return t('dashboard.cards.googleRating', {
+                    rating: ratingValue.toFixed(1),
+                    reviews: formattedCount
+                });
+            }, [locale, t]);
 
             React.useEffect(() => {
                 document.title = t('meta.title.dashboard');
@@ -100,7 +79,6 @@
 
             const loadData = React.useCallback(async () => {
                 const token = localStorage.getItem('sb_token');
-                tokenRef.current = token;
 
                 if (!token) {
                     window.location.href = '/';
@@ -135,7 +113,6 @@
 
                     setUser(profile);
                     setRestaurants(Array.isArray(list) ? list : []);
-                    setRatings({});
                     setStatus({ tone: 'success', message: t('dashboard.status.ready') });
                 } catch (error) {
                     console.error('Dashboard load failed:', error);
@@ -187,71 +164,27 @@
                 window.location.href = '/profile.html';
             };
 
-            const handleRating = async (restaurantId, ratingValue) => {
-                const token = tokenRef.current || localStorage.getItem('sb_token');
-
-                if (!token) {
-                    window.location.href = '/';
-                    return;
-                }
-
-                const previous = ratings[restaurantId] || 0;
-                setRatings((prev) => ({ ...prev, [restaurantId]: ratingValue }));
-                setStatus({ tone: 'info', message: t('dashboard.status.ratingSending') });
-
-                try {
-                    const response = await fetch('/api/rate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`
-                        },
-                        body: JSON.stringify({ restaurant_id: Number(restaurantId), rating: Number(ratingValue) })
-                    });
-
-                    if (response.ok) {
-                        setStatus({
-                            tone: 'success',
-                            message: t('dashboard.status.ratingSaved', {
-                                rating: ratingValue,
-                                suffix: ratingValue > 1 ? 's' : ''
-                            })
-                        });
-                        return;
-                    }
-
-                    const errorData = await response.json().catch(() => ({}));
-                    setRatings((prev) => ({ ...prev, [restaurantId]: previous }));
-                    setStatus({
-                        tone: 'error',
-                        message: errorData.error || t('dashboard.status.ratingDuplicate')
-                    });
-                } catch (error) {
-                    console.error('Rating failed:', error);
-                    setRatings((prev) => ({ ...prev, [restaurantId]: previous }));
-                    setStatus({ tone: 'error', message: t('dashboard.status.ratingConnection') });
-                }
-            };
-
             const cuisineOptions = React.useMemo(() => {
                 const unique = new Set();
                 restaurants.forEach((item) => {
-                    if (item.cuisine) unique.add(item.cuisine);
+                    const label = formatCategory(item.types);
+                    if (label) unique.add(label);
                 });
                 return Array.from(unique).sort();
-            }, [restaurants]);
+            }, [formatCategory, restaurants]);
 
             const filteredRestaurants = React.useMemo(() => {
                 return restaurants.filter((restaurant) => {
-                    const matchesCuisine = cuisineFilter === 'all' || restaurant.cuisine === cuisineFilter;
+                    const categoryLabel = formatCategory(restaurant.types);
+                    const matchesCuisine = cuisineFilter === 'all' || categoryLabel === cuisineFilter;
                     const normalizedQuery = query.trim().toLowerCase();
 
                     if (!normalizedQuery) return matchesCuisine;
 
-                    const haystack = `${restaurant.name || ''} ${restaurant.cuisine || ''} ${restaurant.address || ''}`.toLowerCase();
+                    const haystack = `${restaurant.name || ''} ${categoryLabel || ''} ${restaurant.address || ''}`.toLowerCase();
                     return matchesCuisine && haystack.includes(normalizedQuery);
                 });
-            }, [restaurants, query, cuisineFilter]);
+            }, [cuisineFilter, formatCategory, query, restaurants]);
 
             const stats = React.useMemo(() => {
                 const total = restaurants.length;
@@ -259,10 +192,6 @@
                 const missingAddress = restaurants.filter((res) => !res.address).length;
                 return { total, mapped, missingAddress };
             }, [restaurants]);
-
-            const ratingLabel = React.useCallback((value) => (
-                t('dashboard.rating.ariaLabel', { value, suffix: value > 1 ? 's' : '' })
-            ), [t]);
 
             return (
                 <div className="dashboard-shell">
@@ -378,28 +307,32 @@
                                         ? `https://www.google.com/maps?q=${restaurant.lat},${restaurant.lng}`
                                         : null;
 
+                                    const categoryLabel = formatCategory(restaurant.types);
+                                    const ratingSummary = formatRatingSummary(restaurant);
+
                                     return (
                                         <article className="restaurant-card" key={restaurant.id}>
+                                            {restaurant.photo_url && (
+                                                <div className="restaurant-photo">
+                                                    <img
+                                                        src={restaurant.photo_url}
+                                                        alt={`${restaurant.name} hero`}
+                                                        loading="lazy"
+                                                    />
+                                                </div>
+                                            )}
                                             <div className="restaurant-heading">
                                                 <h3>{restaurant.name}</h3>
-                                                <span className="badge">{restaurant.cuisine || t('dashboard.cards.cuisineTbd')}</span>
+                                                <span className="badge">{categoryLabel}</span>
                                             </div>
                                             <p className="restaurant-address">{restaurant.address || t('dashboard.cards.addressMissing')}</p>
                                             <div className="restaurant-meta">
-                                                <span>{hasCoordinates ? t('dashboard.cards.gpsReady') : t('dashboard.cards.addCoordinates')}</span>
+                                                <span>{ratingSummary}</span>
                                                 {mapsUrl && (
                                                     <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                                                         {t('dashboard.cards.viewOnMaps')}
                                                     </a>
                                                 )}
-                                            </div>
-                                            <div className="restaurant-actions">
-                                                <p>{t('dashboard.cards.ratingPrompt')}</p>
-                                                <RatingStars
-                                                    currentValue={ratings[restaurant.id] || 0}
-                                                    onRate={(value) => handleRating(restaurant.id, value)}
-                                                    getLabel={ratingLabel}
-                                                />
                                             </div>
                                         </article>
                                     );

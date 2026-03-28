@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/JoaoDaviRibeiro/GastroGO/internal/auth"
 	"github.com/JoaoDaviRibeiro/GastroGO/internal/supabase"
@@ -19,7 +20,11 @@ func main() {
 
 	// 2. Initialize Supabase Client and Auth Handler
 	sbClient := supabase.NewClient()
-	authHandler := &auth.Handler{Supabase: sbClient}
+	placesKey := os.Getenv("GOOGLE_PLACES_API_KEY")
+	if placesKey == "" {
+		log.Println("Warning: GOOGLE_PLACES_API_KEY is not set; restaurant lookup will fail")
+	}
+	authHandler := &auth.Handler{Supabase: sbClient, PlacesAPIKey: placesKey}
 
 	// 3. Static File Server (Frontend)
 	// Serves index.html, dashboard.html, and script.js from the public folder

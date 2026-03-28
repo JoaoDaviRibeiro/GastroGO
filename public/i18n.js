@@ -148,7 +148,9 @@
                     gpsReady: 'GPS ready',
                     addCoordinates: 'Add coordinates',
                     viewOnMaps: 'View on Maps ↗',
-                    ratingPrompt: 'How is this location performing?'
+                    ratingPrompt: 'How is this location performing?',
+                    ratingUnavailable: 'Rating unavailable',
+                    googleRating: '{rating} ★ · {reviews} reviews'
                 },
                 filter: {
                     allCuisines: 'All cuisines'
@@ -336,7 +338,9 @@
                     gpsReady: 'GPS pronto',
                     addCoordinates: 'Adicionar coordenadas',
                     viewOnMaps: 'Ver no Maps ↗',
-                    ratingPrompt: 'Como está o desempenho desta unidade?'
+                    ratingPrompt: 'Como está o desempenho desta unidade?',
+                    ratingUnavailable: 'Sem avaliações públicas',
+                    googleRating: '{rating} ★ · {reviews} avaliações'
                 },
                 filter: {
                     allCuisines: 'Todas as cozinhas'
