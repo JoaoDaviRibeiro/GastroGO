@@ -6,7 +6,7 @@
     <title>GastroGO Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="page-dashboard">
@@ -43,7 +43,6 @@
         function DashboardApp() {
             const RESTAURANTS_PER_PAGE = 15;
             const { t, locale } = window.useI18n();
-            const [user, setUser] = React.useState(null);
             const [restaurants, setRestaurants] = React.useState([]);
             const [loading, setLoading] = React.useState(true);
             const [status, setStatus] = React.useState({ tone: 'info', message: '' });
@@ -57,12 +56,20 @@
                 }
                 return 'dark';
             });
-            const formatCategory = React.useCallback((types = []) => {
+            const normalizeCategory = React.useCallback((types = []) => {
                 if (!Array.isArray(types) || types.length === 0) {
                     return t('dashboard.cards.cuisineTbd');
                 }
+
+                if (types.some((type) => type === 'meal_delivery' || type === 'meal_takeaway')) {
+                    return t('dashboard.cards.delivery');
+                }
+
                 return types[0].replace(/_/g, ' ');
             }, [t]);
+            const formatCategory = React.useCallback((types = []) => {
+                return normalizeCategory(types);
+            }, [normalizeCategory]);
             const formatRatingSummary = React.useCallback((restaurant) => {
                 const ratingValue = Number(restaurant.rating);
                 if (!ratingValue) {
@@ -112,10 +119,9 @@
                         throw new Error('Request failed');
                     }
 
-                    const profile = await userRes.json();
+                    await userRes.json();
                     const list = await restaurantRes.json();
 
-                    setUser(profile);
                     setRestaurants(Array.isArray(list) ? list : []);
                     setPage(1);
                     setStatus({ tone: 'success', message: t('dashboard.status.ready') });
@@ -260,9 +266,6 @@
 
                         <div className="header-actions">
                             <ThemeToggle theme={theme} onToggle={toggleTheme} />
-                            <div className="user-pill">
-                                <span>{user?.email || t('dashboard.userPillFallback')}</span>
-                            </div>
                             <button
                                 className="ghost"
                                 type="button"

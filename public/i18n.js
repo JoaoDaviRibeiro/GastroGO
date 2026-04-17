@@ -107,7 +107,7 @@
             dashboard: {
                 header: {
                     eyebrow: 'GASTROGO',
-                    title: 'Operations cockpit',
+                    title: 'Welcome!',
                     body: 'Monitor every location, sync feedback, and keep your staff informed from a single pane.'
                 },
                 status: {
@@ -149,6 +149,7 @@
                 },
                 cards: {
                     cuisineTbd: 'Cuisine TBD',
+                    delivery: 'delivery',
                     addressMissing: 'Address not listed yet',
                     gpsReady: 'GPS ready',
                     addCoordinates: 'Add coordinates',
@@ -308,7 +309,7 @@
             dashboard: {
                 header: {
                     eyebrow: 'GASTROGO',
-                    title: 'Cockpit de operações',
+                    title: 'Bem Vindo!',
                     body: 'Monitore cada unidade, centralize feedbacks e mantenha a equipe alinhada em um único painel.'
                 },
                 status: {
@@ -350,6 +351,7 @@
                 },
                 cards: {
                     cuisineTbd: 'Cozinha indefinida',
+                    delivery: 'delivery',
                     addressMissing: 'Endereço ainda não informado',
                     gpsReady: 'GPS pronto',
                     addCoordinates: 'Adicionar coordenadas',
