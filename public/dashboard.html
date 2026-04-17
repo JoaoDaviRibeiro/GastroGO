@@ -41,6 +41,7 @@
         }
 
         function DashboardApp() {
+            const RESTAURANTS_PER_PAGE = 15;
             const { t, locale } = window.useI18n();
             const [user, setUser] = React.useState(null);
             const [restaurants, setRestaurants] = React.useState([]);
@@ -48,6 +49,8 @@
             const [status, setStatus] = React.useState({ tone: 'info', message: '' });
             const [query, setQuery] = React.useState('');
             const [cuisineFilter, setCuisineFilter] = React.useState('all');
+            const [sortOrder, setSortOrder] = React.useState('rating-desc');
+            const [page, setPage] = React.useState(1);
             const [theme, setTheme] = React.useState(() => {
                 if (typeof window !== 'undefined' && window.getPreferredTheme) {
                     return window.getPreferredTheme();
@@ -77,7 +80,7 @@
                 document.title = t('meta.title.dashboard');
             }, [locale, t]);
 
-            const loadData = React.useCallback(async () => {
+            const loadData = React.useCallback(async (forceRefresh = false) => {
                 const token = localStorage.getItem('sb_token');
 
                 if (!token) {
@@ -89,9 +92,10 @@
                 setStatus({ tone: 'info', message: t('dashboard.status.syncing') });
 
                 try {
+                    const restaurantsEndpoint = forceRefresh ? '/api/restaurants?refresh=1' : '/api/restaurants';
                     const [userRes, restaurantRes] = await Promise.all([
                         fetch('/api/dashboard', { headers: { Authorization: `Bearer ${token}` } }),
-                        fetch('/api/restaurants', { headers: { Authorization: `Bearer ${token}` } })
+                        fetch(restaurantsEndpoint, { headers: { Authorization: `Bearer ${token}` } })
                     ]);
 
                     if (userRes.status === 401 || restaurantRes.status === 401) {
@@ -113,6 +117,7 @@
 
                     setUser(profile);
                     setRestaurants(Array.isArray(list) ? list : []);
+                    setPage(1);
                     setStatus({ tone: 'success', message: t('dashboard.status.ready') });
                 } catch (error) {
                     console.error('Dashboard load failed:', error);
@@ -185,6 +190,57 @@
                     return matchesCuisine && haystack.includes(normalizedQuery);
                 });
             }, [cuisineFilter, formatCategory, query, restaurants]);
+
+            React.useEffect(() => {
+                setPage(1);
+            }, [query, cuisineFilter, sortOrder]);
+
+            const sortedRestaurants = React.useMemo(() => {
+                const sorted = [...filteredRestaurants];
+                sorted.sort((left, right) => {
+                    const leftHasPhoto = left.photo_url ? 1 : 0;
+                    const rightHasPhoto = right.photo_url ? 1 : 0;
+                    if (leftHasPhoto !== rightHasPhoto) {
+                        return rightHasPhoto - leftHasPhoto;
+                    }
+
+                    const leftRating = Number(left.rating) || 0;
+                    const rightRating = Number(right.rating) || 0;
+
+                    if (sortOrder === 'rating-asc') {
+                        return leftRating - rightRating;
+                    }
+
+                    return rightRating - leftRating;
+                });
+                return sorted;
+            }, [filteredRestaurants, sortOrder]);
+
+            const totalPages = React.useMemo(() => (
+                Math.max(1, Math.ceil(sortedRestaurants.length / RESTAURANTS_PER_PAGE))
+            ), [sortedRestaurants.length]);
+
+            React.useEffect(() => {
+                setPage((current) => Math.min(current, totalPages));
+            }, [totalPages]);
+
+            const paginatedRestaurants = React.useMemo(() => {
+                const start = (page - 1) * RESTAURANTS_PER_PAGE;
+                return sortedRestaurants.slice(start, start + RESTAURANTS_PER_PAGE);
+            }, [page, sortedRestaurants]);
+
+            const pageSummary = React.useMemo(() => {
+                if (sortedRestaurants.length === 0) {
+                    return t('dashboard.pagination.empty');
+                }
+                const start = (page - 1) * RESTAURANTS_PER_PAGE + 1;
+                const end = Math.min(page * RESTAURANTS_PER_PAGE, sortedRestaurants.length);
+                return t('dashboard.pagination.summary', {
+                    start,
+                    end,
+                    total: sortedRestaurants.length
+                });
+            }, [page, sortedRestaurants.length, t]);
 
             const stats = React.useMemo(() => {
                 const total = restaurants.length;
@@ -281,15 +337,28 @@
                                         </option>
                                     ))}
                                 </select>
+                                <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)}>
+                                    <option value="rating-desc">{t('dashboard.sort.ratingHighToLow')}</option>
+                                    <option value="rating-asc">{t('dashboard.sort.ratingLowToHigh')}</option>
+                                </select>
                                 <button type="button" className="ghost" onClick={loadData}>
                                     {t('dashboard.panel.refresh')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="ghost discreet"
+                                    onClick={() => loadData(true)}
+                                    aria-label={t('dashboard.panel.refreshCache')}
+                                    title={t('dashboard.panel.refreshCache')}
+                                >
+                                    {t('dashboard.panel.refreshCache')}
                                 </button>
                             </div>
                         </div>
 
                         {loading ? (
                             <div className="panel-loading">{t('dashboard.panel.loading')}</div>
-                        ) : filteredRestaurants.length === 0 ? (
+                        ) : sortedRestaurants.length === 0 ? (
                             <div className="panel-empty">
                                 <p>{t('dashboard.panel.empty')}</p>
                                 <button type="button" className="ghost" onClick={() => {
@@ -301,7 +370,7 @@
                             </div>
                         ) : (
                             <div className="restaurant-grid">
-                                {filteredRestaurants.map((restaurant) => {
+                                {paginatedRestaurants.map((restaurant) => {
                                     const hasCoordinates = Number(restaurant.lat) && Number(restaurant.lng);
                                     const mapsUrl = hasCoordinates
                                         ? `https://www.google.com/maps?q=${restaurant.lat},${restaurant.lng}`
@@ -337,6 +406,28 @@
                                         </article>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {!loading && filteredRestaurants.length > 0 && (
+                            <div className="pagination-controls">
+                                <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                                    disabled={page === 1}
+                                >
+                                    {t('dashboard.pagination.previous')}
+                                </button>
+                                <p className="pagination-summary">{pageSummary}</p>
+                                <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                                    disabled={page === totalPages}
+                                >
+                                    {t('dashboard.pagination.next')}
+                                </button>
                             </div>
                         )}
                     </section>

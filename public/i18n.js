@@ -140,7 +140,12 @@
                     empty: 'No restaurants match that filter.',
                     searchPlaceholder: 'Search by name, cuisine, or address',
                     resetFilters: 'Clear filters',
-                    refresh: 'Refresh'
+                    refresh: 'Refresh',
+                    refreshCache: 'Refresh cache'
+                },
+                sort: {
+                    ratingHighToLow: 'Google rating: high to low',
+                    ratingLowToHigh: 'Google rating: low to high'
                 },
                 cards: {
                     cuisineTbd: 'Cuisine TBD',
@@ -154,6 +159,12 @@
                 },
                 filter: {
                     allCuisines: 'All cuisines'
+                },
+                pagination: {
+                    previous: 'Previous 15',
+                    next: 'Next 15',
+                    summary: 'Showing {start}-{end} of {total}',
+                    empty: 'No restaurants to show.'
                 },
                 userPillFallback: 'Loading profile...',
                 rating: {
@@ -330,7 +341,12 @@
                     empty: 'Nenhum restaurante corresponde ao filtro.',
                     searchPlaceholder: 'Busque por nome, cozinha ou endereço',
                     resetFilters: 'Limpar filtros',
-                    refresh: 'Atualizar'
+                    refresh: 'Atualizar',
+                    refreshCache: 'Atualizar cache'
+                },
+                sort: {
+                    ratingHighToLow: 'Avaliação do Google: maior para menor',
+                    ratingLowToHigh: 'Avaliação do Google: menor para maior'
                 },
                 cards: {
                     cuisineTbd: 'Cozinha indefinida',
@@ -344,6 +360,12 @@
                 },
                 filter: {
                     allCuisines: 'Todas as cozinhas'
+                },
+                pagination: {
+                    previous: '15 anteriores',
+                    next: 'Próximos 15',
+                    summary: 'Mostrando {start}-{end} de {total}',
+                    empty: 'Nenhum restaurante para exibir.'
                 },
                 userPillFallback: 'Carregando perfil...',
                 rating: {
