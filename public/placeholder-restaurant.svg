@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300" viewBox="0 0 600 300" role="img" aria-label="Restaurant placeholder">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#0b2a3a" />
+      <stop offset="1" stop-color="#1f6f8b" />
+    </linearGradient>
+    <style>
+      .large { font: 96px 'Poppins', Arial, sans-serif; fill: #fff; font-weight:700 }
+      .small { font: 14px 'Poppins', Arial, sans-serif; fill: rgba(255,255,255,0.9) }
+    </style>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#g)" />
+  <g transform="translate(40,40)">
+    <circle cx="90" cy="90" r="72" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.08)" />
+    <text x="90" y="115" text-anchor="middle" class="large">G</text>
+  </g>
+  <text x="180" y="70" class="large" style="font-size:28px;">GastroGO</text>
+  <text x="180" y="100" class="small">Photo not available</text>
+</svg>

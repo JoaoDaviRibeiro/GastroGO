@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,15 +17,22 @@ import (
 )
 
 type Handler struct {
-	Supabase        *supabase.Client
-	PlacesAPIKey    string
-	cacheMu         sync.Mutex
-	restaurantCache map[string]restaurantCacheEntry
+	Supabase            *supabase.Client
+	PlacesAPIKey        string
+	cacheMu             sync.Mutex
+	restaurantCache     map[string]restaurantCacheEntry
+	popularTimesCache   map[string]popularTimesCacheEntry
+	popularTimesFetcher func(context.Context, string) (popularTimesPayload, error)
 }
 
 type restaurantCacheEntry struct {
 	expiresAt time.Time
 	results   []restaurantPlace
+}
+
+type popularTimesCacheEntry struct {
+	expiresAt time.Time
+	result    popularTimesPayload
 }
 
 type ReviewRequest struct {
@@ -109,6 +118,26 @@ type placeResult struct {
 	Geometry         placeGeometry `json:"geometry"`
 	Photos           []placePhoto  `json:"photos"`
 	Types            []string      `json:"types"`
+}
+
+type popularTimesDay struct {
+	Name string `json:"name"`
+	Data []int  `json:"data"`
+}
+
+type popularTimesPayload struct {
+	ID                string            `json:"id"`
+	Name              string            `json:"name,omitempty"`
+	CurrentPopularity *int              `json:"current_popularity,omitempty"`
+	PopularTimes      []popularTimesDay `json:"populartimes,omitempty"`
+	TimeWait          []popularTimesDay `json:"time_wait,omitempty"`
+	TimeSpent         []int             `json:"time_spent,omitempty"`
+	Error             string            `json:"error,omitempty"`
+	ErrorDetails      string            `json:"details,omitempty"`
+}
+
+type popularTimesBatchResponse struct {
+	Results map[string]popularTimesPayload `json:"results"`
 }
 
 type placesResponse struct {
@@ -276,6 +305,181 @@ func (h *Handler) GetRestaurants(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+func (h *Handler) GetPopularTimes(w http.ResponseWriter, r *http.Request) {
+	placeIDs := splitAndCleanIDs(r.URL.Query().Get("placeIds"))
+	if len(placeIDs) == 0 {
+		if singlePlaceID := strings.TrimSpace(r.URL.Query().Get("placeId")); singlePlaceID != "" {
+			placeIDs = []string{singlePlaceID}
+		}
+	}
+
+	if len(placeIDs) == 0 {
+		http.Error(w, "placeId or placeIds is required", http.StatusBadRequest)
+		return
+	}
+
+	results := h.fetchPopularTimesBatch(r.Context(), placeIDs)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(popularTimesBatchResponse{Results: results})
+}
+
+func (h *Handler) fetchPopularTimesBatch(ctx context.Context, placeIDs []string) map[string]popularTimesPayload {
+	results := make(map[string]popularTimesPayload, len(placeIDs))
+	missing := make([]string, 0, len(placeIDs))
+
+	for _, placeID := range placeIDs {
+		cleanedID := strings.TrimSpace(placeID)
+		if cleanedID == "" {
+			continue
+		}
+
+		if cached, ok := h.getCachedPopularTimes(cleanedID); ok {
+			results[cleanedID] = cached
+			continue
+		}
+
+		missing = append(missing, cleanedID)
+	}
+
+	if len(missing) == 0 {
+		return results
+	}
+
+	var resultsMu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+
+	for _, placeID := range missing {
+		wg.Add(1)
+		go func(placeID string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			result, err := h.fetchPopularTimes(ctx, placeID)
+			if err != nil {
+				log.Printf("Popular times fetch failed for %s: %v", placeID, err)
+				return
+			}
+
+			h.setCachedPopularTimes(placeID, result, 30*time.Minute)
+
+			resultsMu.Lock()
+			results[placeID] = result
+			resultsMu.Unlock()
+		}(placeID)
+	}
+
+	wg.Wait()
+	return results
+}
+
+func (h *Handler) fetchPopularTimes(ctx context.Context, placeID string) (popularTimesPayload, error) {
+	if h.popularTimesFetcher != nil {
+		return h.popularTimesFetcher(ctx, placeID)
+	}
+
+	if strings.TrimSpace(h.PlacesAPIKey) == "" {
+		return popularTimesPayload{}, &popularTimesUnavailableError{message: "Google Places API key is not configured"}
+	}
+
+	pythonExec, pythonArgs, err := findPythonExecutable()
+	if err != nil {
+		return popularTimesPayload{}, err
+	}
+
+	script := `import json
+import sys
+
+try:
+    import populartimes
+except Exception as exc:
+    print(json.dumps({"error": "populartimes_unavailable", "details": str(exc)}))
+    sys.exit(3)
+
+api_key = sys.argv[1]
+place_id = sys.argv[2]
+
+try:
+    result = populartimes.get_id(api_key, place_id)
+    print(json.dumps(result, ensure_ascii=False))
+except Exception as exc:
+    print(json.dumps({"error": "populartimes_failed", "details": str(exc)}))
+    sys.exit(2)
+`
+
+	requestCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+
+	args := append(pythonArgs, "-c", script, h.PlacesAPIKey, placeID)
+	cmd := exec.CommandContext(requestCtx, pythonExec, args...)
+	output, err := cmd.Output()
+	if err != nil {
+		var payload popularTimesPayload
+		if len(output) > 0 {
+			if unmarshalErr := json.Unmarshal(output, &payload); unmarshalErr == nil && payload.Error != "" {
+				return popularTimesPayload{}, &popularTimesUnavailableError{message: payload.Error, details: payload.ErrorDetails}
+			}
+		}
+		return popularTimesPayload{}, err
+	}
+
+	var payload popularTimesPayload
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return popularTimesPayload{}, err
+	}
+
+	if payload.ID == "" {
+		payload.ID = placeID
+	}
+
+	return payload, nil
+}
+
+func findPythonExecutable() (string, []string, error) {
+	candidates := []struct {
+		name string
+		args []string
+	}{
+		{name: "python"},
+		{name: "py", args: []string{"-3"}},
+		{name: "python3"},
+	}
+
+	for _, candidate := range candidates {
+		if path, err := exec.LookPath(candidate.name); err == nil {
+			return path, candidate.args, nil
+		}
+	}
+
+	return "", nil, &popularTimesUnavailableError{message: "Python executable not found"}
+}
+
+type popularTimesUnavailableError struct {
+	message string
+	details string
+}
+
+func (e *popularTimesUnavailableError) Error() string {
+	if strings.TrimSpace(e.details) == "" {
+		return e.message
+	}
+	return e.message + ": " + e.details
+}
+
+func splitAndCleanIDs(raw string) []string {
+	parts := strings.Split(raw, ",")
+	results := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		if cleaned := strings.TrimSpace(part); cleaned != "" {
+			results = append(results, cleaned)
+		}
+	}
+
+	return results
+}
+
 func (h *Handler) fetchPlanoPilotoRestaurants(ctx context.Context) ([]restaurantPlace, error) {
 	type fetchResult struct {
 		places []restaurantPlace
@@ -378,13 +582,26 @@ func (h *Handler) fetchRestaurantsForQuery(ctx context.Context, queryText string
 		}
 
 		for _, place := range apiResponse.Results {
+			photo := buildPhotoURL(place.Photos, h.PlacesAPIKey)
+			if photo == "" {
+				lat := place.Geometry.Location.Lat
+				lng := place.Geometry.Location.Lng
+				if lat != 0 && lng != 0 {
+					photo = buildStaticMapURL(lat, lng, h.PlacesAPIKey)
+				}
+			}
+
+			if photo == "" {
+				photo = placeholderImageDataURI(place.Name)
+			}
+
 			results = append(results, restaurantPlace{
 				ID:               place.PlaceID,
 				Name:             place.Name,
 				Address:          firstNonEmpty(place.FormattedAddress, place.Vicinity),
 				Rating:           place.Rating,
 				UserRatingsTotal: place.UserRatingsTotal,
-				PhotoURL:         buildPhotoURL(place.Photos, h.PlacesAPIKey),
+				PhotoURL:         photo,
 				Lat:              place.Geometry.Location.Lat,
 				Lng:              place.Geometry.Location.Lng,
 				Types:            place.Types,
@@ -411,6 +628,11 @@ func (h *Handler) fetchRestaurantsForQuery(ctx context.Context, queryText string
 	return results, nil
 }
 
+// FetchForDebug is a thin wrapper for debugging from cmd/debug
+func (h *Handler) FetchForDebug(query string) ([]restaurantPlace, error) {
+	return h.fetchRestaurantsForQuery(context.Background(), query, "")
+}
+
 func (h *Handler) fetchNearbyRestaurantsPage(ctx context.Context, seed nearbySearchSeed, keyword string) ([]restaurantPlace, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, placesRequestTimeout)
 	defer cancel()
@@ -429,6 +651,15 @@ func (h *Handler) fetchNearbyRestaurantsPage(ctx context.Context, seed nearbySea
 		params.Set("keyword", keyword)
 	}
 	req.URL.RawQuery = params.Encode()
+
+	// Debug: mask key when logging the outgoing URL
+	safeURL := *req.URL
+	q := safeURL.Query()
+	if q.Has("key") {
+		q.Set("key", "****")
+		safeURL.RawQuery = q.Encode()
+	}
+	log.Printf("Google Places request: %s", safeURL.String())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -458,13 +689,26 @@ func (h *Handler) fetchNearbyRestaurantsPage(ctx context.Context, seed nearbySea
 
 	results := make([]restaurantPlace, 0, len(apiResponse.Results))
 	for _, place := range apiResponse.Results {
+		photo := buildPhotoURL(place.Photos, h.PlacesAPIKey)
+		if photo == "" {
+			lat := place.Geometry.Location.Lat
+			lng := place.Geometry.Location.Lng
+			if lat != 0 && lng != 0 {
+				photo = buildStaticMapURL(lat, lng, h.PlacesAPIKey)
+			}
+		}
+
+		if photo == "" {
+			photo = placeholderImageDataURI(place.Name)
+		}
+
 		results = append(results, restaurantPlace{
 			ID:               place.PlaceID,
 			Name:             place.Name,
 			Address:          firstNonEmpty(place.FormattedAddress, place.Vicinity),
 			Rating:           place.Rating,
 			UserRatingsTotal: place.UserRatingsTotal,
-			PhotoURL:         buildPhotoURL(place.Photos, h.PlacesAPIKey),
+			PhotoURL:         photo,
 			Lat:              place.Geometry.Location.Lat,
 			Lng:              place.Geometry.Location.Lng,
 			Types:            place.Types,
@@ -520,6 +764,22 @@ func (h *Handler) getCachedRestaurants(key string) ([]restaurantPlace, bool) {
 	return results, true
 }
 
+func (h *Handler) getCachedPopularTimes(key string) (popularTimesPayload, bool) {
+	h.cacheMu.Lock()
+	defer h.cacheMu.Unlock()
+
+	if h.popularTimesCache == nil {
+		return popularTimesPayload{}, false
+	}
+
+	entry, ok := h.popularTimesCache[key]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return popularTimesPayload{}, false
+	}
+
+	return entry.result, true
+}
+
 func (h *Handler) setCachedRestaurants(key string, results []restaurantPlace, ttl time.Duration) {
 	h.cacheMu.Lock()
 	defer h.cacheMu.Unlock()
@@ -533,6 +793,20 @@ func (h *Handler) setCachedRestaurants(key string, results []restaurantPlace, tt
 	h.restaurantCache[key] = restaurantCacheEntry{
 		expiresAt: time.Now().Add(ttl),
 		results:   cachedResults,
+	}
+}
+
+func (h *Handler) setCachedPopularTimes(key string, result popularTimesPayload, ttl time.Duration) {
+	h.cacheMu.Lock()
+	defer h.cacheMu.Unlock()
+
+	if h.popularTimesCache == nil {
+		h.popularTimesCache = make(map[string]popularTimesCacheEntry)
+	}
+
+	h.popularTimesCache[key] = popularTimesCacheEntry{
+		expiresAt: time.Now().Add(ttl),
+		result:    result,
 	}
 }
 
@@ -599,11 +873,32 @@ func buildPhotoURL(photos []placePhoto, apiKey string) string {
 		return ""
 	}
 
+	// Return a proxied endpoint on our server to avoid exposing API key and referrer issues
 	values := url.Values{}
+	values.Set("ref", ref)
 	values.Set("maxwidth", "800")
-	values.Set("photo_reference", ref)
+	return "/api/restaurants/photo?" + values.Encode()
+}
+
+func buildStaticMapURL(lat float64, lng float64, apiKey string) string {
+	if strings.TrimSpace(apiKey) == "" {
+		return ""
+	}
+
+	values := url.Values{}
+	// modest size to be friendly to bandwidth
+	values.Set("center", trimFloat(lat)+","+trimFloat(lng))
+	values.Set("zoom", "16")
+	values.Set("size", "600x300")
+	values.Set("maptype", "roadmap")
+	values.Set("markers", "color:0xff6f61|"+trimFloat(lat)+","+trimFloat(lng))
 	values.Set("key", apiKey)
-	return googlePlacesPhotoEndpoint + "?" + values.Encode()
+	return "https://maps.googleapis.com/maps/api/staticmap?" + values.Encode()
+}
+
+func placeholderImageDataURI(name string) string {
+	// return a static placeholder file path served from /public
+	return "/placeholder-restaurant.svg"
 }
 
 func firstNonEmpty(values ...string) string {
@@ -613,4 +908,61 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// ServePhotoProxy proxies Google Place Photo requests server-side so the API key is not exposed
+func (h *Handler) ServePhotoProxy(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	maxwidth := strings.TrimSpace(r.URL.Query().Get("maxwidth"))
+	if ref == "" {
+		http.Error(w, "photo ref required", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(h.PlacesAPIKey) == "" {
+		http.Error(w, "Google Places API key not configured", http.StatusInternalServerError)
+		return
+	}
+
+	values := url.Values{}
+	if maxwidth == "" {
+		maxwidth = "800"
+	}
+	values.Set("maxwidth", maxwidth)
+	values.Set("photo_reference", ref)
+	values.Set("key", h.PlacesAPIKey)
+
+	photoURL := googlePlacesPhotoEndpoint + "?" + values.Encode()
+
+	// Proxy the request
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, photoURL, nil)
+	if err != nil {
+		http.Error(w, "failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "failed to fetch photo", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Pass through status codes
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		w.Write(body)
+		return
+	}
+
+	// Copy headers and body
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, resp.Body)
 }

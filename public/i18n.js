@@ -158,6 +158,16 @@
                     ratingUnavailable: 'Rating unavailable',
                     googleRating: '{rating} ★ · {reviews} reviews'
                 },
+                popularTimes: {
+                    title: 'Popular times',
+                    current: 'Now: {value}%',
+                    weeklyPeak: 'Peak: {day} at {value}%',
+                    todayHours: 'Today’s hourly pattern ({day})',
+                    scale: 'Busy percentage',
+                    unavailable: 'Mostly full on weekends.',
+                    estimated: 'Estimated',
+                    loading: 'Loading popular times...'
+                },
                 filter: {
                     allCuisines: 'All cuisines'
                 },
@@ -187,6 +197,16 @@
                     saving: 'Saving profile...',
                     saved: 'Profile updated successfully.',
                     saveError: 'Unable to save profile.'
+                },
+                popularTimes: {
+                    title: 'Popular times',
+                    current: 'Now: {value}%',
+                    weeklyPeak: 'Peak: {day} at {value}%',
+                    todayHours: 'Today’s hourly pattern ({day})',
+                    scale: 'Busy percentage',
+                    unavailable: 'Mostly full on weekends.',
+                    estimated: 'Estimated',
+                    loading: 'Loading popular times...'
                 },
                 section: {
                     personalTitle: 'Personal details',
@@ -359,6 +379,16 @@
                     ratingPrompt: 'Como está o desempenho desta unidade?',
                     ratingUnavailable: 'Sem avaliações públicas',
                     googleRating: '{rating} ★ · {reviews} avaliações'
+                },
+                popularTimes: {
+                    title: 'Horários populares',
+                    current: 'Agora: {value}%',
+                    weeklyPeak: 'Pico: {day} às {value}%',
+                    todayHours: 'Padrão horário de hoje ({day})',
+                    scale: 'Percentual de movimento',
+                    unavailable: 'Principalmente cheio nos finais de semana.',
+                    estimated: 'Estimativa',
+                    loading: 'Carregando horários populares...'
                 },
                 filter: {
                     allCuisines: 'Todas as cozinhas'

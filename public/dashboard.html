@@ -10,6 +10,27 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="page-dashboard">
+    <script>
+        (function(){
+            function showError(msg){
+                try{
+                    var id='runtime-errors';
+                    var el=document.getElementById(id);
+                    if(!el){
+                        el=document.createElement('div'); el.id=id;
+                        el.style.position='fixed'; el.style.left=0; el.style.right=0; el.style.top=0; el.style.zIndex=99999;
+                        el.style.background='rgba(200,50,50,0.95)'; el.style.color='white'; el.style.padding='8px'; el.style.fontFamily='monospace'; el.style.fontSize='13px';
+                        document.documentElement.appendChild(el);
+                    }
+                    var p=document.createElement('div'); p.textContent=String(msg);
+                    el.appendChild(p);
+                }catch(e){/* ignore */}
+            }
+            window.addEventListener('error', function(ev){ showError(ev.message + ' @ ' + (ev.filename||'') + ':' + (ev.lineno||'') ); });
+            window.addEventListener('unhandledrejection', function(ev){ showError('UnhandledRejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)) ); });
+            window.onerror = function(){ showError(Array.prototype.join.call(arguments,' ')); };
+        })();
+    </script>
     <main class="page dashboard-page">
         <div class="bg-mesh"></div>
         <div class="noise"></div>
@@ -41,15 +62,17 @@
         }
 
         function DashboardApp() {
-            const RESTAURANTS_PER_PAGE = 15;
+            const RESTAURANTS_PER_PAGE = 6;
             const { t, locale } = window.useI18n();
             const [restaurants, setRestaurants] = React.useState([]);
             const [loading, setLoading] = React.useState(true);
             const [status, setStatus] = React.useState({ tone: 'info', message: '' });
+            const [popularTimesByRestaurant, setPopularTimesByRestaurant] = React.useState({});
             const [query, setQuery] = React.useState('');
             const [cuisineFilter, setCuisineFilter] = React.useState('all');
             const [sortOrder, setSortOrder] = React.useState('rating-desc');
             const [page, setPage] = React.useState(1);
+            const popularTimesRequestedRef = React.useRef(new Set());
             const [theme, setTheme] = React.useState(() => {
                 if (typeof window !== 'undefined' && window.getPreferredTheme) {
                     return window.getPreferredTheme();
@@ -82,6 +105,50 @@
                     reviews: formattedCount
                 });
             }, [locale, t]);
+            const weekdayLabels = React.useMemo(() => {
+                const formatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+                return Array.from({ length: 7 }, (_, index) => formatter.format(new Date(Date.UTC(2024, 0, 1 + index))));
+            }, [locale]);
+
+            const summarizePopularTimes = React.useCallback((popularTimesData) => {
+                const daily = Array.isArray(popularTimesData?.populartimes) ? popularTimesData.populartimes : [];
+
+                if (daily.length === 0) {
+                    return null;
+                }
+
+                const normalizedDays = daily.slice(0, 7).map((day, index) => {
+                    const hourlyValues = Array.isArray(day.data)
+                        ? day.data.map((value) => Math.max(0, Math.min(100, Number(value) || 0)))
+                        : [];
+
+                    return {
+                        label: weekdayLabels[index] || day.name || '',
+                        hourlyValues,
+                        peakValue: hourlyValues.length ? Math.max(...hourlyValues) : 0
+                    };
+                });
+
+                const peakDay = normalizedDays.reduce((currentBest, day, index) => {
+                    if (!currentBest || day.peakValue > currentBest.peakValue) {
+                        return { ...day, index };
+                    }
+                    return currentBest;
+                }, null);
+
+                const currentPopularity = Number(popularTimesData?.current_popularity);
+                const todayIndex = (new Date().getDay() + 6) % 7;
+
+                return {
+                    days: normalizedDays,
+                    peakDay,
+                    todayIndex,
+                    currentDay: normalizedDays[todayIndex] || normalizedDays[0],
+                    currentPopularity: Number.isFinite(currentPopularity)
+                        ? Math.max(0, Math.min(100, currentPopularity))
+                        : null
+                };
+            }, [weekdayLabels]);
 
             React.useEffect(() => {
                 document.title = t('meta.title.dashboard');
@@ -121,6 +188,9 @@
 
                     await userRes.json();
                     const list = await restaurantRes.json();
+
+                    popularTimesRequestedRef.current.clear();
+                    setPopularTimesByRestaurant({});
 
                     setRestaurants(Array.isArray(list) ? list : []);
                     setPage(1);
@@ -234,6 +304,60 @@
                 const start = (page - 1) * RESTAURANTS_PER_PAGE;
                 return sortedRestaurants.slice(start, start + RESTAURANTS_PER_PAGE);
             }, [page, sortedRestaurants]);
+
+            React.useEffect(() => {
+                if (loading) return;
+
+                const restaurantIds = paginatedRestaurants
+                    .map((restaurant) => restaurant.id)
+                    .filter(Boolean);
+
+                const pendingIds = restaurantIds.filter((restaurantId) => {
+                    return !popularTimesByRestaurant[restaurantId] && !popularTimesRequestedRef.current.has(restaurantId);
+                });
+
+                if (pendingIds.length === 0) {
+                    return;
+                }
+
+                const token = localStorage.getItem('sb_token');
+                if (!token) {
+                    return;
+                }
+
+                pendingIds.forEach((restaurantId) => popularTimesRequestedRef.current.add(restaurantId));
+
+                const controller = new AbortController();
+
+                const loadPopularTimes = async () => {
+                    try {
+                        const response = await fetch(`/api/restaurants/popular-times?placeIds=${encodeURIComponent(pendingIds.join(','))}`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                            signal: controller.signal
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Popular times request failed');
+                        }
+
+                        const payload = await response.json();
+                        const results = payload?.results || {};
+
+                        setPopularTimesByRestaurant((current) => ({
+                            ...current,
+                            ...results
+                        }));
+                    } catch (error) {
+                        if (error.name !== 'AbortError') {
+                            console.error('Popular times load failed:', error);
+                        }
+                    }
+                };
+
+                loadPopularTimes();
+
+                return () => controller.abort();
+            }, [loading, paginatedRestaurants, popularTimesByRestaurant]);
 
             const pageSummary = React.useMemo(() => {
                 if (sortedRestaurants.length === 0) {
@@ -381,6 +505,7 @@
 
                                     const categoryLabel = formatCategory(restaurant.types);
                                     const ratingSummary = formatRatingSummary(restaurant);
+                                    const popularTimesSummary = summarizePopularTimes(popularTimesByRestaurant[restaurant.id]);
 
                                     return (
                                         <article className="restaurant-card" key={restaurant.id}>
@@ -404,6 +529,60 @@
                                                     <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                                                         {t('dashboard.cards.viewOnMaps')}
                                                     </a>
+                                                )}
+                                            </div>
+                                            <div className="popular-times">
+                                                <div className="popular-times-header">
+                                                    <span>{t('dashboard.popularTimes.title')}</span>
+                                                    {popularTimesSummary?.currentPopularity !== null && popularTimesSummary?.currentPopularity !== undefined && (
+                                                        <span className="popular-times-chip">
+                                                            {t('dashboard.popularTimes.current', { value: popularTimesSummary.currentPopularity })}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {popularTimesSummary ? (
+                                                    <>
+                                                        <div className="popular-times-week" aria-label={t('dashboard.popularTimes.title')}>
+                                                            {popularTimesSummary.days.map((day, index) => (
+                                                                <div className="popular-times-day" key={`${restaurant.id}-day-${index}`}>
+                                                                    <span>{day.label}</span>
+                                                                    <div className="popular-times-track" aria-hidden="true">
+                                                                        <i style={{ height: `${Math.max(8, day.peakValue)}%` }}></i>
+                                                                    </div>
+                                                                    <strong>{day.peakValue}%</strong>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        <div className="popular-times-hourly">
+                                                            <div className="popular-times-hourly-header">
+                                                                <span>{t('dashboard.popularTimes.todayHours', { day: popularTimesSummary.currentDay?.label || '' })}</span>
+                                                                {popularTimesSummary.peakDay && (
+                                                                    <small>
+                                                                        {t('dashboard.popularTimes.weeklyPeak', {
+                                                                            day: popularTimesSummary.peakDay.label,
+                                                                            value: popularTimesSummary.peakDay.peakValue
+                                                                        })}
+                                                                    </small>
+                                                                )}
+                                                            </div>
+                                                            <div className="popular-times-bars" aria-label={t('dashboard.popularTimes.todayHours', { day: popularTimesSummary.currentDay?.label || '' })}>
+                                                                {(popularTimesSummary.currentDay?.hourlyValues || []).map((value, hour) => (
+                                                                    <span
+                                                                        key={`${restaurant.id}-hour-${hour}`}
+                                                                        title={`${hour}:00 - ${value}%`}
+                                                                        style={{ height: `${Math.max(6, value)}%` }}
+                                                                    ></span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div>
+                                                        <p className="popular-times-empty">{t('dashboard.popularTimes.unavailable')}</p>
+                                                        <small className="popular-times-caption">{t('dashboard.popularTimes.estimated')}</small>
+                                                    </div>
                                                 )}
                                             </div>
                                         </article>

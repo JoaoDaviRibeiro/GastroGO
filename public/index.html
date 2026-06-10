@@ -10,6 +10,27 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="page-auth">
+    <script>
+        (function(){
+            function showError(msg){
+                try{
+                    var id='runtime-errors';
+                    var el=document.getElementById(id);
+                    if(!el){
+                        el=document.createElement('div'); el.id=id;
+                        el.style.position='fixed'; el.style.left=0; el.style.right=0; el.style.top=0; el.style.zIndex=99999;
+                        el.style.background='rgba(200,50,50,0.95)'; el.style.color='white'; el.style.padding='8px'; el.style.fontFamily='monospace'; el.style.fontSize='13px';
+                        document.documentElement.appendChild(el);
+                    }
+                    var p=document.createElement('div'); p.textContent=String(msg);
+                    el.appendChild(p);
+                }catch(e){/* ignore */}
+            }
+            window.addEventListener('error', function(ev){ showError(ev.message + ' @ ' + (ev.filename||'') + ':' + (ev.lineno||'') ); });
+            window.addEventListener('unhandledrejection', function(ev){ showError('UnhandledRejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)) ); });
+            window.onerror = function(){ showError(Array.prototype.join.call(arguments,' ')); };
+        })();
+    </script>
     <main class="page">
         <div class="bg-mesh"></div>
         <div class="noise"></div>

@@ -43,6 +43,10 @@ func main() {
 
 	// Get the list of all restaurants
 	http.HandleFunc("/api/restaurants", authHandler.IsAuthenticated(authHandler.GetRestaurants))
+	http.HandleFunc("/api/restaurants/popular-times", authHandler.IsAuthenticated(authHandler.GetPopularTimes))
+
+	// Proxy for Google Place Photos (no auth to allow images on public pages)
+	http.HandleFunc("/api/restaurants/photo", authHandler.ServePhotoProxy)
 
 	// Submit a Letterboxd-style rating
 	http.HandleFunc("/api/rate", authHandler.IsAuthenticated(authHandler.RateRestaurant))

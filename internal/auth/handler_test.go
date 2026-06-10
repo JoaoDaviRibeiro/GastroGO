@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -49,7 +50,7 @@ func TestFirstNonEmpty(t *testing.T) {
 func TestBuildPhotoURL(t *testing.T) {
 	photos := []placePhoto{{PhotoReference: "photo-ref", Width: 400, Height: 300}}
 	url := buildPhotoURL(photos, "api-key")
-	want := "https://maps.googleapis.com/maps/api/place/photo?key=api-key&maxwidth=800&photo_reference=photo-ref"
+	want := "/api/restaurants/photo?maxwidth=800&ref=photo-ref"
 	if url != want {
 		t.Fatalf("expected %q got %q", want, url)
 	}
@@ -104,7 +105,7 @@ func TestGetRestaurantsSuccess(t *testing.T) {
 		t.Fatalf("unexpected place data: %+v", got)
 	}
 
-	expectedPhoto := "https://maps.googleapis.com/maps/api/place/photo?key=test-key&maxwidth=800&photo_reference=ref123"
+	expectedPhoto := "/api/restaurants/photo?maxwidth=800&ref=ref123"
 	if got.PhotoURL != expectedPhoto {
 		t.Fatalf("unexpected photo url: %s", got.PhotoURL)
 	}
@@ -253,5 +254,43 @@ func TestGetRestaurantsPlanoPilotoAreasAggregatedAndDeduped(t *testing.T) {
 
 	if len(payload) != 2 {
 		t.Fatalf("expected deduped 2 results got %d", len(payload))
+	}
+}
+
+func TestGetPopularTimesBatch(t *testing.T) {
+	handler := &Handler{
+		popularTimesFetcher: func(ctx context.Context, placeID string) (popularTimesPayload, error) {
+			current := 42
+			return popularTimesPayload{
+				ID:                placeID,
+				CurrentPopularity: &current,
+				PopularTimes: []popularTimesDay{{
+					Name: "Monday",
+					Data: []int{0, 10, 20, 42},
+				}},
+			}, nil
+		},
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/restaurants/popular-times?placeIds=abc,def", nil)
+
+	handler.GetPopularTimes(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200 got %d", rr.Code)
+	}
+
+	var payload popularTimesBatchResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode payload: %v", err)
+	}
+
+	if len(payload.Results) != 2 {
+		t.Fatalf("expected 2 popular times entries got %d", len(payload.Results))
+	}
+
+	if payload.Results["abc"].ID != "abc" || payload.Results["def"].ID != "def" {
+		t.Fatalf("unexpected popular times payload: %+v", payload.Results)
 	}
 }
