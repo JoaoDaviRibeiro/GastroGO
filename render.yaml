@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: gastrogo
+    env: go
+    plan: free
+    buildCommand: go build -o bin/server ./cmd/server
+    startCommand: ./bin/server
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false

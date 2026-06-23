@@ -52,8 +52,13 @@ func main() {
 	http.HandleFunc("/api/rate", authHandler.IsAuthenticated(authHandler.RateRestaurant))
 
 	// 6. Start the Server
-	log.Println("🚀 GastroGO server is live on http://localhost:8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("🚀 GastroGO server is live on http://localhost:%s\n", port)
 
 	// log.Fatal will log the error and exit if the port is already in use
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
